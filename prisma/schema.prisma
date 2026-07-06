@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  sites        Site[]
+}
+
+model Site {
+  id        String   @id @default(cuid())
+  name      String
+  domain    String
+  publicKey String   @unique
+  secretKey String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  events    Event[]
+  sessions  Session[]
+
+  @@index([domain])
+  @@index([ownerId])
+}
+
+model Visitor {
+  id          String    @id @default(cuid())
+  visitorKey  String    @unique
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  events      Event[]
+  sessions    Session[]
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  sessionKey  String    @unique
+  siteId      String
+  visitorId   String?
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  durationMs  Int?
+  site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  visitor     Visitor?  @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+  events      Event[]
+
+  @@index([siteId, startedAt])
+  @@index([visitorId])
+}
+
+model Event {
+  id             String   @id @default(cuid())
+  siteId         String
+  visitorId      String?
+  sessionId      String?
+  type           String
+  path           String?
+  url            String?
+  title          String?
+  referrer       String?
+  referrerDomain String?
+  ipAddress      String?
+  ipHash         String?
+  country        String?
+  region         String?
+  city           String?
+  asn            String?
+  isp            String?
+  userAgent      String?
+  browser        String?
+  os             String?
+  device         String?
+  screenWidth    Int?
+  screenHeight   Int?
+  language       String?
+  timezone       String?
+  isBot          Boolean  @default(false)
+  botName        String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  site           Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  visitor        Visitor? @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+  session        Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([siteId, createdAt])
+  @@index([siteId, type])
+  @@index([ipAddress])
+  @@index([ipHash])
+  @@index([country])
+  @@index([path])
+}
+
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  source    String
+  type      String
+  ipAddress String?
+  ipHash    String?
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([ipAddress])
+  @@index([type])
+}
+
+model ServerMetric {
+  id             String   @id @default(cuid())
+  cpuPercent     Float?
+  memoryUsedMb   Float?
+  memoryTotalMb  Float?
+  diskUsedGb     Float?
+  diskTotalGb    Float?
+  load1           Float?
+  load5           Float?
+  load15          Float?
+  uptimeSeconds   Int?
+  networkRxBytes  BigInt?
+  networkTxBytes  BigInt?
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+}

@@ -1,0 +1,105 @@
+export const dynamic = "force-dynamic";
+
+const tracker = String.raw`
+(function () {
+  var script = document.currentScript;
+  var siteId = script && script.getAttribute("data-site-id");
+  if (!siteId) return;
+
+  var endpoint = new URL("/api/track", script.src).toString();
+  var visitorKey = "bufferdash_visitor_id";
+  var sessionKey = "bufferdash_session_id";
+  var sessionTimeKey = "bufferdash_session_started_at";
+
+  function id(prefix) {
+    return prefix + "_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+
+  function getStored(key, prefix, ttlMs) {
+    try {
+      var existing = localStorage.getItem(key);
+      var startedAt = Number(sessionStorage.getItem(sessionTimeKey) || "0");
+      if (existing && (!ttlMs || Date.now() - startedAt < ttlMs)) return existing;
+      var next = id(prefix);
+      if (key === sessionKey) {
+        sessionStorage.setItem(key, next);
+        sessionStorage.setItem(sessionTimeKey, String(Date.now()));
+      } else {
+        localStorage.setItem(key, next);
+      }
+      return next;
+    } catch (error) {
+      return id(prefix);
+    }
+  }
+
+  var visitorId = getStored(visitorKey, "v");
+  var sessionId = getStored(sessionKey, "s", 30 * 60 * 1000);
+  var startedAt = Date.now();
+
+  function payload(type, metadata) {
+    var url = new URL(window.location.href);
+    url.hash = "";
+    return {
+      siteId: siteId,
+      type: type || "pageview",
+      path: window.location.pathname,
+      url: url.toString(),
+      referrer: document.referrer || null,
+      title: document.title || null,
+      screenWidth: window.screen && window.screen.width,
+      screenHeight: window.screen && window.screen.height,
+      language: navigator.language,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      visitorId: visitorId,
+      sessionId: sessionId,
+      metadata: metadata || undefined
+    };
+  }
+
+  function send(data, keepalive) {
+    var body = JSON.stringify(data);
+    if (navigator.sendBeacon && keepalive) {
+      navigator.sendBeacon(endpoint, new Blob([body], { type: "application/json" }));
+      return;
+    }
+    fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: body,
+      keepalive: Boolean(keepalive),
+      credentials: "omit"
+    }).catch(function () {});
+  }
+
+  window.bufferdash = window.bufferdash || {};
+  window.bufferdash.track = function (type, metadata) {
+    send(payload(type || "custom", metadata));
+  };
+
+  send(payload("pageview"));
+
+  window.addEventListener("pagehide", function () {
+    var data = payload("pagehide");
+    data.durationMs = Date.now() - startedAt;
+    send(data, true);
+  });
+
+  document.addEventListener("click", function (event) {
+    var target = event.target && event.target.closest && event.target.closest("a[href]");
+    if (!target) return;
+    var href = target.href;
+    if (href && target.hostname !== window.location.hostname) {
+      send(payload("outbound_click", { href: href }), true);
+    }
+  });
+})();`;
+
+export function GET() {
+  return new Response(tracker, {
+    headers: {
+      "content-type": "application/javascript; charset=utf-8",
+      "cache-control": "public, max-age=300, stale-while-revalidate=86400"
+    }
+  });
+}

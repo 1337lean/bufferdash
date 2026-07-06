@@ -1,0 +1,13 @@
+.env
+.env.local
+.env.production
+*.log
+logs/
+node_modules/
+.npm-cache/
+.next/
+dist/
+coverage/
+prisma/dev.db
+tsconfig.tsbuildinfo
+bufferdash_build_plan.md
