@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { Event, SecurityEvent, Site } from "@prisma/client";
+import { Prisma, type Event, type SecurityEvent, type Site } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export type TopRow = {
@@ -8,14 +8,14 @@ export type TopRow = {
   value: number;
 };
 
-export function startOfToday() {
-  const date = new Date();
+export function startOfToday(now = new Date()) {
+  const date = new Date(now);
   date.setHours(0, 0, 0, 0);
   return date;
 }
 
-export function sinceHours(hours: number) {
-  return new Date(Date.now() - hours * 60 * 60 * 1000);
+export function sinceHours(hours: number, now = new Date()) {
+  return new Date(now.getTime() - hours * 60 * 60 * 1000);
 }
 
 export async function getSites() {
@@ -37,50 +37,37 @@ export async function getSite(siteId: string) {
 }
 
 export async function getOverview(siteId?: string) {
-  const today = startOfToday();
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+  const now = new Date();
+  const today = startOfToday(now);
+  const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+  const timelineStart = startOfHour(sinceHours(23, now));
   const where = siteId ? { siteId } : {};
   const todayWhere = { ...where, createdAt: { gte: today } };
 
-  const [pageViewsToday, visitorsToday, sessionsToday, liveVisitors, sessions, events, sites, securityEvents] =
+  const [pageViewsToday, uniqueVisitorsToday, sessionsToday, liveVisitors, sessionDuration, timeline, sites, securityEvents] =
     await Promise.all([
       prisma.event.count({ where: { ...todayWhere, type: "pageview" } }),
-      prisma.event.groupBy({
-        by: ["visitorId"],
-        where: { ...todayWhere, visitorId: { not: null } }
-      }),
+      countDistinctVisitorsSince(today, siteId),
       prisma.session.count({ where: { ...where, startedAt: { gte: today } } }),
-      prisma.event.groupBy({
-        by: ["visitorId"],
-        where: { ...where, createdAt: { gte: fiveMinutesAgo }, visitorId: { not: null } }
-      }),
-      prisma.session.findMany({
+      countDistinctVisitorsSince(fiveMinutesAgo, siteId),
+      prisma.session.aggregate({
         where: { ...where, startedAt: { gte: today }, durationMs: { not: null } },
-        select: { durationMs: true }
+        _avg: { durationMs: true }
       }),
-      prisma.event.findMany({
-        where: { ...where, createdAt: { gte: sinceHours(24) } },
-        orderBy: { createdAt: "asc" },
-        select: { createdAt: true, type: true }
-      }),
+      getHourlyTimeline(timelineStart, now, siteId),
       prisma.site.count(),
       prisma.securityEvent.count({ where: { createdAt: { gte: today } } })
     ]);
 
-  const averageSessionDuration =
-    sessions.length === 0
-      ? 0
-      : sessions.reduce((total, session) => total + (session.durationMs || 0), 0) / sessions.length;
-
   return {
     pageViewsToday,
-    uniqueVisitorsToday: visitorsToday.length,
+    uniqueVisitorsToday,
     sessionsToday,
-    liveVisitors: liveVisitors.length,
-    averageSessionDuration,
+    liveVisitors,
+    averageSessionDuration: sessionDuration._avg.durationMs || 0,
     sites,
     securityEvents,
-    timeline: buildHourlyTimeline(events)
+    timeline
   };
 }
 
@@ -130,10 +117,11 @@ export async function getRecentEvents(siteId?: string, limit = 40) {
 }
 
 export async function getLiveVisitors(siteId?: string) {
+  const now = new Date();
   const events = await prisma.event.findMany({
     where: {
       ...(siteId ? { siteId } : {}),
-      createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) }
+      createdAt: { gte: new Date(now.getTime() - 5 * 60 * 1000) }
     },
     orderBy: { createdAt: "desc" },
     include: { site: true },
@@ -195,10 +183,53 @@ export async function getAppLogs() {
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 80);
 }
 
-function buildHourlyTimeline(events: Array<{ createdAt: Date; type: string }>) {
+type HourlyTimelineRow = {
+  hour: Date;
+  pageviews: bigint | number;
+  events: bigint | number;
+};
+
+function siteSqlFilter(siteId?: string) {
+  return siteId ? Prisma.sql`AND "siteId" = ${siteId}` : Prisma.empty;
+}
+
+async function countDistinctVisitorsSince(since: Date, siteId?: string) {
+  const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
+    SELECT COUNT(DISTINCT "visitorId") AS "count"
+    FROM "Event"
+    WHERE "createdAt" >= ${since}
+      AND "visitorId" IS NOT NULL
+      ${siteSqlFilter(siteId)}
+  `);
+
+  return Number(rows[0]?.count || 0);
+}
+
+async function getHourlyTimeline(start: Date, now: Date, siteId?: string) {
+  const rows = await prisma.$queryRaw<HourlyTimelineRow[]>(Prisma.sql`
+    SELECT
+      date_trunc('hour', "createdAt") AS "hour",
+      COUNT(*) FILTER (WHERE "type" = 'pageview') AS "pageviews",
+      COUNT(*) AS "events"
+    FROM "Event"
+    WHERE "createdAt" >= ${start}
+      ${siteSqlFilter(siteId)}
+    GROUP BY 1
+    ORDER BY 1 ASC
+  `);
+
+  return buildHourlyTimeline(rows, now);
+}
+
+function startOfHour(date: Date) {
+  const hour = new Date(date);
+  hour.setMinutes(0, 0, 0);
+  return hour;
+}
+
+function buildHourlyTimeline(rows: HourlyTimelineRow[], now: Date) {
   const buckets = Array.from({ length: 24 }, (_, index) => {
-    const date = new Date(Date.now() - (23 - index) * 60 * 60 * 1000);
-    date.setMinutes(0, 0, 0);
+    const date = startOfHour(new Date(now.getTime() - (23 - index) * 60 * 60 * 1000));
     return {
       key: date.toISOString(),
       time: date.toLocaleTimeString("en-US", { hour: "numeric" }),
@@ -209,13 +240,12 @@ function buildHourlyTimeline(events: Array<{ createdAt: Date; type: string }>) {
 
   const indexByKey = new Map(buckets.map((bucket, index) => [bucket.key, index]));
 
-  for (const event of events) {
-    const date = new Date(event.createdAt);
-    date.setMinutes(0, 0, 0);
+  for (const row of rows) {
+    const date = startOfHour(new Date(row.hour));
     const index = indexByKey.get(date.toISOString());
     if (index === undefined) continue;
-    buckets[index].events += 1;
-    if (event.type === "pageview") buckets[index].pageviews += 1;
+    buckets[index].events = Number(row.events || 0);
+    buckets[index].pageviews = Number(row.pageviews || 0);
   }
 
   return buckets;

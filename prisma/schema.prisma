@@ -17,15 +17,15 @@ model User {
 }
 
 model Site {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
   domain    String
-  publicKey String   @unique
+  publicKey String    @unique
   secretKey String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   events    Event[]
   sessions  Session[]
 
@@ -43,18 +43,19 @@ model Visitor {
 }
 
 model Session {
-  id          String    @id @default(cuid())
-  sessionKey  String    @unique
-  siteId      String
-  visitorId   String?
-  startedAt   DateTime  @default(now())
-  endedAt     DateTime?
-  durationMs  Int?
-  site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  visitor     Visitor?  @relation(fields: [visitorId], references: [id], onDelete: SetNull)
-  events      Event[]
+  id         String    @id @default(cuid())
+  sessionKey String    @unique
+  siteId     String
+  visitorId  String?
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+  durationMs Int?
+  site       Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  visitor    Visitor?  @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+  events     Event[]
 
   @@index([siteId, startedAt])
+  @@index([startedAt])
   @@index([visitorId])
 }
 
@@ -92,8 +93,17 @@ model Event {
   visitor        Visitor? @relation(fields: [visitorId], references: [id], onDelete: SetNull)
   session        Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
+  @@index([createdAt])
   @@index([siteId, createdAt])
   @@index([siteId, type])
+  @@index([siteId, type, createdAt])
+  @@index([type, createdAt])
+  @@index([siteId, path])
+  @@index([siteId, referrerDomain])
+  @@index([siteId, country])
+  @@index([siteId, browser])
+  @@index([siteId, os])
+  @@index([siteId, device])
   @@index([ipAddress])
   @@index([ipHash])
   @@index([country])
@@ -111,6 +121,7 @@ model SecurityEvent {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+  @@index([createdAt, ipHash])
   @@index([ipAddress])
   @@index([type])
 }
@@ -122,13 +133,13 @@ model ServerMetric {
   memoryTotalMb  Float?
   diskUsedGb     Float?
   diskTotalGb    Float?
-  load1           Float?
-  load5           Float?
-  load15          Float?
-  uptimeSeconds   Int?
-  networkRxBytes  BigInt?
-  networkTxBytes  BigInt?
-  createdAt       DateTime @default(now())
+  load1          Float?
+  load5          Float?
+  load15         Float?
+  uptimeSeconds  Int?
+  networkRxBytes BigInt?
+  networkTxBytes BigInt?
+  createdAt      DateTime @default(now())
 
   @@index([createdAt])
 }
