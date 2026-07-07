@@ -41,9 +41,9 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The Compose stack starts PostgreSQL, waits for it to become healthy, runs Prisma migrations with the `migrate` service, and then starts the app. PostgreSQL is persisted in the `postgres_data` Docker volume and is only bound to `127.0.0.1:5432` on the host.
+The Compose stack starts PostgreSQL, waits for it to become healthy, runs Prisma migrations with the `migrate` service, and then starts the app. PostgreSQL is persisted in the `postgres_data` Docker volume and is not published on a host port.
 
-Do not expose PostgreSQL publicly. Keep it bound to localhost, use a VPS firewall, and put Nginx or Caddy with HTTPS in front of the app.
+Do not expose PostgreSQL publicly. Keep it on Docker's internal network, use a VPS firewall, and put Nginx or Caddy with HTTPS in front of the app.
 
 ## VPS Deployment
 
@@ -83,7 +83,7 @@ docker compose ps
 curl -fsS http://127.0.0.1:3000/health
 ```
 
-For the VPS firewall, allow only SSH, HTTP, and HTTPS from the public internet. The app should stay behind the reverse proxy on port `3000`, and PostgreSQL should not be reachable from outside the VPS.
+For the VPS firewall, allow only SSH, HTTP, and HTTPS from the public internet. The app should stay behind the reverse proxy on port `3000`, and PostgreSQL should not be reachable from outside Docker.
 
 ## Database Backups
 
