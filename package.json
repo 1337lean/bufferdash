@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint app components lib --max-warnings=0",
     "typecheck": "tsc --noEmit",
+    "db:backup": "scripts/backup-postgres.sh",
+    "db:restore": "scripts/restore-postgres.sh",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy"

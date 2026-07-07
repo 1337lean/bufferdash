@@ -39,10 +39,69 @@ http://localhost:3000
 ```bash
 cp .env.example .env
 docker compose up -d
-docker compose exec app npx prisma migrate deploy
 ```
 
+The Compose stack starts PostgreSQL, waits for it to become healthy, runs Prisma migrations with the `migrate` service, and then starts the app. PostgreSQL is persisted in the `postgres_data` Docker volume and is only bound to `127.0.0.1:5432` on the host.
+
 Do not expose PostgreSQL publicly. Keep it bound to localhost, use a VPS firewall, and put Nginx or Caddy with HTTPS in front of the app.
+
+## VPS Deployment
+
+On the VPS:
+
+```bash
+git clone https://github.com/1337lean/bufferdash.git
+cd bufferdash
+cp .env.example .env
+```
+
+Edit `.env` before starting the stack:
+
+```env
+APP_URL=https://dash.example.com
+DATABASE_URL=postgresql://bufferdash:replace_with_a_real_password@postgres:5432/bufferdash
+POSTGRES_PASSWORD=replace_with_a_real_password
+SESSION_SECRET=replace_with_a_long_random_secret
+TRACKING_SECRET=replace_with_a_different_long_random_secret
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD_HASH=replace_with_a_bcrypt_hash
+TRUST_PROXY=true
+```
+
+Generate secrets and the admin password hash:
+
+```bash
+openssl rand -base64 48
+node -e "const bcrypt=require('bcryptjs'); bcrypt.hash(process.argv[1], 12).then(console.log)" 'your-password'
+```
+
+Start or update the app:
+
+```bash
+docker compose up -d --build
+docker compose ps
+curl -fsS http://127.0.0.1:3000/health
+```
+
+For the VPS firewall, allow only SSH, HTTP, and HTTPS from the public internet. The app should stay behind the reverse proxy on port `3000`, and PostgreSQL should not be reachable from outside the VPS.
+
+## Database Backups
+
+Create a compressed PostgreSQL dump:
+
+```bash
+npm run db:backup
+```
+
+Restore a dump:
+
+```bash
+docker compose stop app
+npm run db:restore -- backups/bufferdash-YYYYMMDDTHHMMSSZ.dump
+docker compose up -d
+```
+
+For production, schedule `npm run db:backup` from cron or a systemd timer and copy the `backups/` output off the VPS.
 
 ## First Admin
 

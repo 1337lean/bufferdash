@@ -3,6 +3,7 @@
 .env.production
 *.log
 logs/
+backups/
 node_modules/
 .npm-cache/
 .next/
