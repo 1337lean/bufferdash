@@ -10,7 +10,7 @@ export default async function ServerPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Server" title="VPS health" description="OS-level CPU, memory, disk, load, uptime, and network counters." />
+      <PageHeader eyebrow="Runtime" title="Application runtime health" description="Opt-in metrics visible to the BufferDash process. In Docker, some values may describe the container rather than the full VPS." />
       <section className="metrics-grid">
         <MetricCard label="CPU" value={`${Math.round(latest?.cpuPercent || 0)}%`} detail="Current load" tone="orange" />
         <MetricCard label="Memory" value={`${memoryPercent}%`} detail={`${Math.round(latest?.memoryUsedMb || 0)} MB used`} />
@@ -18,7 +18,7 @@ export default async function ServerPage() {
         <MetricCard label="Load avg" value={(latest?.load1 || 0).toFixed(2)} detail={`${Math.round((latest?.uptimeSeconds || 0) / 3600)}h uptime`} />
       </section>
       <section className="panel span-full">
-        <div className="panel-header"><h2>Resource history</h2><span>Sampled when dashboard/API is read</span></div>
+        <div className="panel-header"><h2>Resource history</h2><span>Sampled when this page or its API is read</span></div>
         <ServerChart data={history} />
       </section>
     </>

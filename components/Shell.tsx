@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { logoutAction } from "@/app/actions";
+import { getCsrfToken } from "@/lib/auth";
 
 const navItems = [
   ["Overview", "/dashboard"],
   ["Sites", "/sites"],
   ["Live", "/live"],
-  ["Security", "/security"],
-  ["Server", "/server"],
-  ["Logs", "/logs"],
+  ["Traffic quality", "/security"],
+  ["Runtime", "/server"],
+  ["Event stream", "/logs"],
   ["Settings", "/settings"]
 ];
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export async function Shell({ children }: { children: React.ReactNode }) {
+  const csrf = await getCsrfToken();
+
   return (
     <div className="dash-shell">
       <aside className="sidebar">
@@ -27,6 +30,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <form action={logoutAction} className="sidebar-footer">
+          <input type="hidden" name="csrf" value={csrf} />
           <button className="ghost-button" type="submit">Log out</button>
         </form>
       </aside>

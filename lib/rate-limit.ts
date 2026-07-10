@@ -4,9 +4,21 @@ type Bucket = {
 };
 
 const buckets = new Map<string, Bucket>();
+let requestsSinceCleanup = 0;
+
+function removeExpiredBuckets(now: number) {
+  for (const [key, bucket] of buckets) {
+    if (bucket.resetAt <= now) buckets.delete(key);
+  }
+}
 
 export function rateLimit(key: string, limit: number, windowMs = 60_000) {
   const now = Date.now();
+  requestsSinceCleanup += 1;
+  if (requestsSinceCleanup >= 1_000 || buckets.size >= 10_000) {
+    removeExpiredBuckets(now);
+    requestsSinceCleanup = 0;
+  }
   const bucket = buckets.get(key);
 
   if (!bucket || bucket.resetAt <= now) {

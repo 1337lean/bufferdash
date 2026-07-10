@@ -55,7 +55,9 @@ export async function loginAction(_state: ActionState, formData: FormData): Prom
   redirect("/dashboard");
 }
 
-export async function logoutAction() {
+export async function logoutAction(formData: FormData) {
+  await requireAdmin();
+  await assertCsrf(formData);
   const store = await cookies();
   store.delete(SESSION_COOKIE);
   store.delete(CSRF_COOKIE);
@@ -82,7 +84,6 @@ export async function createSiteAction(_state: ActionState, formData: FormData):
     data: {
       ...parsed.data,
       publicKey,
-      secretKey: nanoid(32),
       ownerId: owner.id
     }
   });
@@ -100,16 +101,6 @@ export async function deleteSiteAction(formData: FormData) {
   redirect("/sites");
 }
 
-export async function updateSettingsAction(_state: ActionState, formData: FormData): Promise<ActionState> {
-  await requireAdmin();
-  await assertCsrf(formData);
-
-  return {
-    success:
-      "Settings are environment controlled in v1. Update .env and restart the app so secrets and privacy flags stay out of the browser."
-  };
-}
-
 export async function deleteOldDataAction(_state: ActionState, formData: FormData): Promise<ActionState> {
   await requireAdmin();
   await assertCsrf(formData);
@@ -119,13 +110,15 @@ export async function deleteOldDataAction(_state: ActionState, formData: FormDat
   }
 
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  await Promise.all([
-    prisma.event.deleteMany({ where: { createdAt: { lt: cutoff } } }),
-    prisma.securityEvent.deleteMany({ where: { createdAt: { lt: cutoff } } }),
-    prisma.serverMetric.deleteMany({ where: { createdAt: { lt: cutoff } } })
-  ]);
+  await prisma.$transaction(async (tx) => {
+    await tx.event.deleteMany({ where: { createdAt: { lt: cutoff } } });
+    await tx.securityEvent.deleteMany({ where: { createdAt: { lt: cutoff } } });
+    await tx.serverMetric.deleteMany({ where: { createdAt: { lt: cutoff } } });
+    await tx.session.deleteMany({ where: { endedAt: { lt: cutoff } } });
+    await tx.visitor.deleteMany({ where: { events: { none: {} }, sessions: { none: {} } } });
+  });
 
-  return { success: `Deleted analytics, security, and metric rows older than ${days} days.` };
+  return { success: `Deleted analytics, sessions, visitors, security events, and metrics older than ${days} days.` };
 }
 
 function normalizeDomain(value: string) {

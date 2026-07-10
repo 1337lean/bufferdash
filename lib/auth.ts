@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { env, isProduction } from "@/lib/env";
+import { assertProductionEnv, env, isProduction } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 export const SESSION_COOKIE = "bufferdash_session";
@@ -49,11 +49,13 @@ export function readSessionToken(token?: string | null): SessionPayload | null {
 }
 
 export async function getSession() {
+  assertProductionEnv();
   const store = await cookies();
   return readSessionToken(store.get(SESSION_COOKIE)?.value);
 }
 
 export async function requireAdmin() {
+  assertProductionEnv();
   const session = await getSession();
   if (!session || session.email !== env.adminEmail) {
     redirect("/login");
@@ -64,6 +66,7 @@ export async function requireAdmin() {
 }
 
 export async function verifyAdminCredentials(email: string, password: string) {
+  assertProductionEnv();
   if (email.toLowerCase().trim() !== env.adminEmail.toLowerCase()) {
     return false;
   }

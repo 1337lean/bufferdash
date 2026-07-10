@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-const tracker = String.raw`
+export const tracker = String.raw`
 (function () {
   var script = document.currentScript;
   var siteId = script && script.getAttribute("data-site-id");
@@ -9,32 +9,43 @@ const tracker = String.raw`
   var endpoint = new URL("/api/track", script.src).toString();
   var visitorKey = "bufferdash_visitor_id";
   var sessionKey = "bufferdash_session_id";
-  var sessionTimeKey = "bufferdash_session_started_at";
+  var sessionTimeKey = "bufferdash_session_last_seen_at";
 
   function id(prefix) {
     return prefix + "_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
 
-  function getStored(key, prefix, ttlMs) {
+  function getVisitorId() {
     try {
-      var existing = localStorage.getItem(key);
-      var startedAt = Number(sessionStorage.getItem(sessionTimeKey) || "0");
-      if (existing && (!ttlMs || Date.now() - startedAt < ttlMs)) return existing;
-      var next = id(prefix);
-      if (key === sessionKey) {
-        sessionStorage.setItem(key, next);
-        sessionStorage.setItem(sessionTimeKey, String(Date.now()));
-      } else {
-        localStorage.setItem(key, next);
-      }
+      var existing = localStorage.getItem(visitorKey);
+      if (existing) return existing;
+      var next = id("v");
+      localStorage.setItem(visitorKey, next);
       return next;
     } catch (error) {
-      return id(prefix);
+      return id("v");
     }
   }
 
-  var visitorId = getStored(visitorKey, "v");
-  var sessionId = getStored(sessionKey, "s", 30 * 60 * 1000);
+  function getSessionId() {
+    try {
+      var existing = sessionStorage.getItem(sessionKey);
+      var lastSeenAt = Number(sessionStorage.getItem(sessionTimeKey) || "0");
+      if (existing && Date.now() - lastSeenAt < 30 * 60 * 1000) {
+        sessionStorage.setItem(sessionTimeKey, String(Date.now()));
+        return existing;
+      }
+      var next = id("s");
+      sessionStorage.setItem(sessionKey, next);
+      sessionStorage.setItem(sessionTimeKey, String(Date.now()));
+      return next;
+    } catch (error) {
+      return id("s");
+    }
+  }
+
+  var visitorId = getVisitorId();
+  var sessionId = getSessionId();
   var startedAt = Date.now();
 
   function payload(type, metadata) {

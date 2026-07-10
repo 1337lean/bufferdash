@@ -41,13 +41,13 @@ export default async function DashboardPage() {
           </div>
           <TopBarChart data={data.browsers} />
         </section>
-        <TopList title="Countries" rows={data.countries} />
+        <TopList title="Tools used · 24h" rows={data.topTools} />
       </section>
 
       <section className="panel span-full">
         <div className="panel-header">
           <h2>Recent events</h2>
-          <span>{numberFormat(overview.securityEvents)} security events today</span>
+          <span>{numberFormat(overview.securityEvents)} traffic flags today</span>
         </div>
         <div className="table-wrap">
           <table>

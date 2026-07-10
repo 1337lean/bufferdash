@@ -1,4 +1,4 @@
-import { deleteOldDataAction, updateSettingsAction } from "@/app/actions";
+import { deleteOldDataAction } from "@/app/actions";
 import { PageHeader } from "@/components/PageHeader";
 import { ActionForm } from "@/components/StateMessage";
 import { getCsrfToken } from "@/lib/auth";
@@ -16,18 +16,15 @@ export default async function SettingsPage() {
           <div className="settings-list">
             <p><span>IP anonymization</span><strong>{env.anonymizeIp ? "On" : "Off"}</strong></p>
             <p><span>Trust proxy headers</span><strong>{env.trustProxy ? "On" : "Off"}</strong></p>
+            <p><span>Site origin checks</span><strong>{env.enforceTrackingOrigin ? "On" : "Off"}</strong></p>
             <p><span>Bot filtering</span><strong>{env.filterBots ? "On" : "Off"}</strong></p>
             <p><span>Retention default</span><strong>{env.dataRetentionDays} days</strong></p>
-            <p><span>Log ingestion</span><strong>{env.enableLogIngestion ? "On" : "Off"}</strong></p>
+            <p><span>Runtime metrics</span><strong>{env.enableServerMetrics ? "On" : "Off"}</strong></p>
           </div>
         </section>
         <section className="panel">
-          <div className="panel-header"><h2>Update settings</h2></div>
-          <ActionForm action={updateSettingsAction} className="stack-form">
-            <input type="hidden" name="csrf" value={csrf} />
-            <p className="muted">Edit `.env` for secrets, IP policy, and server toggles. This keeps production secrets out of the UI.</p>
-            <button className="secondary-button" type="submit">Why locked?</button>
-          </ActionForm>
+          <div className="panel-header"><h2>Configuration</h2></div>
+          <p className="muted">Edit `.env` and restart BufferDash to change privacy, proxy, retention, and runtime settings. Secrets are intentionally never editable in the browser.</p>
         </section>
       </section>
       <section className="panel span-full">

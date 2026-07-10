@@ -37,7 +37,7 @@ export default async function SiteDetailPage({ params }: { params: Promise<{ sit
       <section className="dashboard-grid">
         <TopList title="Top pages" rows={data.topPages} />
         <TopList title="Referrers" rows={data.referrers} />
-        <TopList title="Countries" rows={data.countries} />
+        <TopList title="Tools used · 24h" rows={data.topTools} />
         <section className="panel">
           <div className="panel-header"><h2>Devices</h2></div>
           <TopBarChart data={data.devices} />

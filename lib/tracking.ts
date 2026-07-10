@@ -4,8 +4,9 @@ import type { Prisma } from "@prisma/client";
 import { UAParser } from "ua-parser-js";
 import { z } from "zod";
 import { detectBot, isSuspiciousPath } from "@/lib/bot";
-import { env } from "@/lib/env";
+import { assertProductionEnv, env } from "@/lib/env";
 import { hashIp, storedIp } from "@/lib/ip";
+import { isAllowedTrackingOrigin } from "@/lib/origin";
 import { prisma } from "@/lib/prisma";
 
 export const trackSchema = z.object({
@@ -58,9 +59,13 @@ function jsonValue(value: unknown): Prisma.InputJsonValue {
   return String(value).slice(0, 120);
 }
 
-export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip: string, userAgent: string | null) {
+export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip: string, userAgent: string | null, origin: string | null) {
+  assertProductionEnv();
   const site = await prisma.site.findUnique({ where: { publicKey: input.siteId } });
   if (!site) return { ok: false as const, status: 404 };
+  if (env.enforceTrackingOrigin && !isAllowedTrackingOrigin(origin, site.domain)) {
+    return { ok: false as const, status: 403 };
+  }
 
   const parser = new UAParser(userAgent || "");
   const ua = parser.getResult();
@@ -68,25 +73,35 @@ export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip
   const ipHash = hashIp(ip);
   const persistedIp = storedIp(ip);
 
+  if (env.filterBots && bot.isBot) {
+    return { ok: true as const, status: 204 };
+  }
+
   const visitor = await prisma.visitor.upsert({
     where: { visitorKey: `${site.publicKey}:${input.visitorId}` },
     update: { lastSeenAt: new Date() },
     create: { visitorKey: `${site.publicKey}:${input.visitorId}` }
   });
 
+  const now = new Date();
   const session = await prisma.session.upsert({
     where: { sessionKey: `${site.publicKey}:${input.sessionId}` },
     update: {
-      endedAt: input.durationMs ? new Date() : undefined,
-      durationMs: input.durationMs || undefined
+      endedAt: now
     },
     create: {
       sessionKey: `${site.publicKey}:${input.sessionId}`,
       siteId: site.id,
       visitorId: visitor.id,
-      durationMs: input.durationMs || undefined
+      endedAt: now,
+      durationMs: 0
     }
   });
+
+  const durationMs = Math.min(Math.max(0, now.getTime() - session.startedAt.getTime()), 86_400_000);
+  if (session.durationMs !== durationMs) {
+    await prisma.session.update({ where: { id: session.id }, data: { durationMs } });
+  }
 
   const event = await prisma.event.create({
     data: {
@@ -133,10 +148,6 @@ export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip
         }
       }
     });
-  }
-
-  if (env.filterBots && bot.isBot) {
-    return { ok: true as const, status: 204 };
   }
 
   return { ok: true as const, status: 204 };
