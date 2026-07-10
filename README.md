@@ -1,6 +1,6 @@
 # BufferDash
 
-BufferDash is a self-hosted analytics, security, and server monitoring dashboard for websites and VPS deployments. It was built for `buffer.lol`, but the tracker and dashboard support multiple sites from one install.
+BufferDash is a self-hosted, first-party web analytics dashboard with traffic-quality signals and optional application-runtime metrics. It was built for `buffer.lol`, but one installation can track multiple sites.
 
 ## Features
 
@@ -8,9 +8,9 @@ BufferDash is a self-hosted analytics, security, and server monitoring dashboard
 - Tiny public `/tracker.js` script
 - Page views, sessions, unique visitors, referrers, browsers, OS, devices, and live visitors
 - Secure IP handling with optional anonymization and hashed IPs
-- Basic bot and suspicious path detection
+- Bot and unusual-path signals visible to the browser tracker
 - Protected admin dashboard with signed HTTP-only sessions and CSRF checks for UI mutations
-- Server health metrics for CPU, memory, disk, load average, uptime, and network counters
+- Optional metrics visible to the BufferDash process, clearly identified as container/runtime data when applicable
 - Docker Compose setup with PostgreSQL
 
 ## Quick Start
@@ -41,7 +41,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The Compose stack starts PostgreSQL, waits for it to become healthy, runs Prisma migrations with the `migrate` service, and then starts the app. PostgreSQL is persisted in the `postgres_data` Docker volume and is not published on a host port.
+The Compose stack starts PostgreSQL, waits for it to become healthy, runs Prisma migrations with the `migrate` service, and then starts the app. PostgreSQL is persisted in the `postgres_data` Docker volume and is not published on a host port. BufferDash binds only to `127.0.0.1:3000` by default.
 
 Do not expose PostgreSQL publicly. Keep it on Docker's internal network, use a VPS firewall, and put Nginx or Caddy with HTTPS in front of the app.
 
@@ -59,6 +59,7 @@ Edit `.env` before starting the stack:
 
 ```env
 APP_URL=https://dash.example.com
+TZ=America/New_York
 DATABASE_URL=postgresql://bufferdash:replace_with_a_real_password@postgres:5432/bufferdash
 POSTGRES_PASSWORD=replace_with_a_real_password
 SESSION_SECRET=replace_with_a_long_random_secret
@@ -66,6 +67,8 @@ TRACKING_SECRET=replace_with_a_different_long_random_secret
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD_HASH=replace_with_a_bcrypt_hash
 TRUST_PROXY=true
+ANONYMIZE_IP=true
+ENABLE_SERVER_METRICS=false
 ```
 
 Generate secrets and the admin password hash:
@@ -82,6 +85,8 @@ docker compose up -d --build
 docker compose ps
 curl -fsS http://127.0.0.1:3000/health
 ```
+
+The health endpoint checks both required production configuration and the database. The container will remain unhealthy if placeholder secrets or an invalid admin password hash are still configured.
 
 For the VPS firewall, allow only SSH, HTTP, and HTTPS from the public internet. The app should stay behind the reverse proxy on port `3000`, and PostgreSQL should not be reachable from outside Docker.
 
@@ -144,6 +149,7 @@ The tracker does not collect form inputs, cookies, localStorage contents, passwo
 See `.env.example` for the full set. The most important production values are:
 
 - `APP_URL`
+- `TZ` (the dashboard's reporting timezone)
 - `DATABASE_URL`
 - `POSTGRES_PASSWORD`
 - `SESSION_SECRET`
@@ -152,6 +158,7 @@ See `.env.example` for the full set. The most important production values are:
 - `TRACKING_SECRET`
 - `ANONYMIZE_IP`
 - `TRUST_PROXY`
+- `ENFORCE_TRACKING_ORIGIN`
 
 Settings are environment-driven in v1 so secrets and operational toggles are not exposed through a browser editor.
 
@@ -159,14 +166,16 @@ Settings are environment-driven in v1 so secrets and operational toggles are not
 
 BufferDash can log IP addresses and user agents. If you deploy it, disclose analytics and IP logging in the privacy policy for every tracked site. Set `ANONYMIZE_IP=true` to store truncated IP addresses while still retaining an HMAC hash for uniqueness and abuse detection.
 
-Data retention cleanup is available from `/settings`. The default retention window is controlled by `DATA_RETENTION_DAYS`.
+Data retention cleanup is available from `/settings`. It removes old events, sessions, orphaned visitor identifiers, traffic flags, and runtime metrics. The default retention window is controlled by `DATA_RETENTION_DAYS`.
 
 ## Security Notes
 
 - `.env` is ignored by Git.
 - Admin sessions are signed, HTTP-only, SameSite cookies.
 - UI mutations include CSRF tokens.
+- Production rejects placeholder secrets, non-HTTPS `APP_URL` values, and missing bcrypt admin hashes.
 - `/api/track` validates payloads with Zod and rate limits by IP.
+- Tracking requests are restricted to each site's configured domain by default. This limits accidental or casual key reuse, though browser origin headers are not a substitute for a private credential.
 - Public APIs never return analytics data.
 - Client-submitted IP, country, city, browser, OS, and device values are not trusted.
 - v1 intentionally does not include a browser terminal, arbitrary file browser, or `.env` editor.
@@ -182,7 +191,8 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Overwrite, rather than append to, client-supplied forwarding headers.
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
@@ -191,10 +201,11 @@ server {
 ## Roadmap
 
 - GeoIP enrichment with IPinfo or MaxMind
-- Fail2Ban and SSH log ingestion
+- Optional reverse-proxy, Fail2Ban, and SSH log ingestion with a dedicated least-privilege agent
 - User roles and TOTP
 - Read-only dashboards
-- Background metric collection worker
+- Scheduled uptime, latency, HTTP status, and TLS-expiry monitoring
+- Background runtime metric and retention workers
 - Public screenshots and deployment guides
 
 ## License

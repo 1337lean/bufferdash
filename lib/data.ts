@@ -80,6 +80,7 @@ export async function topByField(
     by: [field],
     where: {
       ...(siteId ? { siteId } : {}),
+      type: "pageview",
       [field]: { not: null }
     },
     _count: { _all: true },
@@ -93,18 +94,33 @@ export async function topByField(
   }));
 }
 
+export async function getTopTools(siteId?: string, limit = 6): Promise<TopRow[]> {
+  const rows = await prisma.$queryRaw<Array<{ label: string; count: bigint | number }>>(Prisma.sql`
+    SELECT "metadata"->>'tool' AS "label", COUNT(*) AS "count"
+    FROM "Event"
+    WHERE "type" = 'tool_used'
+      AND "createdAt" >= ${sinceHours(24)}
+      AND "metadata"->>'tool' IS NOT NULL
+      ${siteSqlFilter(siteId)}
+    GROUP BY 1
+    ORDER BY 2 DESC
+    LIMIT ${limit}
+  `);
+
+  return rows.map((row) => ({ label: row.label, value: Number(row.count) }));
+}
+
 export async function getDashboardData(siteId?: string) {
-  const [overview, topPages, referrers, countries, browsers, os, devices] = await Promise.all([
+  const [overview, topPages, referrers, browsers, devices, topTools] = await Promise.all([
     getOverview(siteId),
     topByField("path", siteId),
     topByField("referrerDomain", siteId),
-    topByField("country", siteId),
     topByField("browser", siteId),
-    topByField("os", siteId),
-    topByField("device", siteId)
+    topByField("device", siteId),
+    getTopTools(siteId)
   ]);
 
-  return { overview, topPages, referrers, countries, browsers, os, devices };
+  return { overview, topPages, referrers, browsers, devices, topTools };
 }
 
 export async function getRecentEvents(siteId?: string, limit = 40) {

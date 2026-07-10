@@ -35,9 +35,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400, headers: corsHeaders });
   }
 
-  const result = await recordTrackingEvent(parsed.data, ip, request.headers.get("user-agent"));
+  const result = await recordTrackingEvent(
+    parsed.data,
+    ip,
+    request.headers.get("user-agent"),
+    request.headers.get("origin")
+  );
   if (!result.ok) {
-    return NextResponse.json({ error: "unknown_site" }, { status: result.status, headers: corsHeaders });
+    const error = result.status === 403 ? "origin_not_allowed" : "unknown_site";
+    return NextResponse.json({ error }, { status: result.status, headers: corsHeaders });
   }
 
   return new NextResponse(null, { status: 204, headers: corsHeaders });

@@ -21,7 +21,6 @@ model Site {
   name      String
   domain    String
   publicKey String    @unique
-  secretKey String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   ownerId   String

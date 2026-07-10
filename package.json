@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint app components lib --max-warnings=0",
+    "lint": "eslint app components lib tests --max-warnings=0",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:backup": "scripts/backup-postgres.sh",
     "db:restore": "scripts/restore-postgres.sh",
@@ -33,7 +34,8 @@
     "eslint": "^9.39.1",
     "eslint-config-next": "^16.2.10",
     "prisma": "^6.19.3",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.7"
   },
   "overrides": {
     "postcss": "8.5.10"

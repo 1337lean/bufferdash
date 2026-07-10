@@ -13,9 +13,11 @@ export function getClientIpFromHeaders(headers: Headers) {
     if (realIp) {
       return realIp.trim();
     }
+
+    return headers.get("cf-connecting-ip") || headers.get("x-vercel-forwarded-for") || null;
   }
 
-  return headers.get("cf-connecting-ip") || headers.get("x-vercel-forwarded-for") || null;
+  return null;
 }
 
 export function getClientIp(request: NextRequest | Request) {

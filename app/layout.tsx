@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     default: "BufferDash",
     template: "%s | BufferDash"
   },
-  description: "Self-hosted analytics, security, and server monitoring for tool sites and VPS deployments.",
+  description: "Self-hosted first-party analytics and traffic-quality monitoring for websites.",
   icons: {
     icon: "/favicon.svg"
   }
