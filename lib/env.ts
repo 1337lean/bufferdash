@@ -12,7 +12,11 @@ export const env = {
   adminRateLimit: Number(process.env.RATE_LIMIT_ADMIN_PER_MINUTE || 60),
   enableServerMetrics: process.env.ENABLE_SERVER_METRICS === "true",
   dataRetentionDays: Number(process.env.DATA_RETENTION_DAYS || 90),
-  filterBots: process.env.FILTER_BOTS === "true"
+  filterBots: process.env.FILTER_BOTS === "true",
+  ipinfoToken: process.env.IPINFO_TOKEN || "",
+  ipinfoTier: process.env.IPINFO_TIER === "core" ? "core" as const : "lite" as const,
+  enableLogIngestion: process.env.ENABLE_LOG_INGESTION === "true",
+  ingestionSecret: process.env.INGESTION_SECRET || ""
 };
 
 export function isProduction() {
@@ -56,6 +60,9 @@ export function assertProductionEnv() {
   }
   if (!Number.isFinite(env.adminRateLimit) || env.adminRateLimit < 1) {
     errors.push("RATE_LIMIT_ADMIN_PER_MINUTE must be a positive number");
+  }
+  if (env.enableLogIngestion && (env.ingestionSecret.length < 32 || looksLikePlaceholder(env.ingestionSecret))) {
+    errors.push("INGESTION_SECRET must be a random value of at least 32 characters when log ingestion is enabled");
   }
 
   if (errors.length > 0) {

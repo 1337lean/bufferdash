@@ -9,6 +9,7 @@
     "lint": "eslint app components lib tests --max-warnings=0",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "validate": "npm run lint && npm run typecheck && npm test && npm run build",
     "db:backup": "scripts/backup-postgres.sh",
     "db:restore": "scripts/restore-postgres.sh",
     "prisma:generate": "prisma generate",

@@ -20,6 +20,7 @@ import { env } from "@/lib/env";
 import { getClientIpFromHeaders } from "@/lib/ip";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
+import { recordSecurityEvent } from "@/lib/security-events";
 
 export type ActionState = {
   error?: string;
@@ -39,11 +40,13 @@ export async function loginAction(_state: ActionState, formData: FormData): Prom
   const limit = rateLimit(`login:${ip}:${email}`, env.adminRateLimit);
 
   if (!limit.allowed) {
+    await recordSecurityEvent({ source: "auth", type: "login_rate_limited", ip, message: "Admin login rate limit exceeded", metadata: { email: email.slice(0, 120) } });
     return { error: "Too many login attempts. Wait a minute and try again." };
   }
 
   const isValid = await verifyAdminCredentials(email, password);
   if (!isValid) {
+    await recordSecurityEvent({ source: "auth", type: "login_failed", ip, message: "Invalid admin login attempt", metadata: { email: email.slice(0, 120) } });
     return { error: "Invalid email or password." };
   }
 

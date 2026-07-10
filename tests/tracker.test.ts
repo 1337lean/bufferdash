@@ -17,7 +17,7 @@ class MemoryStorage {
 function runTracker(localStorage: MemoryStorage, sessionStorage: MemoryStorage) {
   const requests: Array<Record<string, unknown>> = [];
   const window = {
-    location: new URL("https://buffer.lol/tools/dns-lookup"),
+    location: new URL("https://buffer.lol/tools/dns-lookup?token=private#private-fragment"),
     screen: { width: 1440, height: 900 },
     addEventListener() {},
     bufferdash: undefined as undefined | { track: (type: string, metadata?: Record<string, unknown>) => void }
@@ -63,7 +63,7 @@ describe("browser tracker", () => {
     expect(second.sessionId).toBe(first.sessionId);
   });
 
-  it("does not include URL fragments", () => {
+  it("does not include URL fragments or query strings by default", () => {
     const request = runTracker(new MemoryStorage(), new MemoryStorage())[0];
     expect(request.url).toBe("https://buffer.lol/tools/dns-lookup");
   });

@@ -9,6 +9,8 @@ node_modules/
 .next/
 dist/
 coverage/
+output/playwright/
+.playwright-cli/
 prisma/dev.db
 tsconfig.tsbuildinfo
 bufferdash_build_plan.md

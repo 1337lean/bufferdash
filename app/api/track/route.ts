@@ -3,6 +3,7 @@ import { env } from "@/lib/env";
 import { getClientIp } from "@/lib/ip";
 import { rateLimit } from "@/lib/rate-limit";
 import { recordTrackingEvent, trackSchema } from "@/lib/tracking";
+import { recordSecurityEvent } from "@/lib/security-events";
 
 export const dynamic = "force-dynamic";
 
@@ -20,12 +21,17 @@ export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
   const limit = rateLimit(`track:${ip}`, env.trackingRateLimit);
   if (!limit.allowed) {
+    await recordSecurityEvent({ source: "tracking", type: "rate_limited", ip, message: "Tracking rate limit exceeded" });
     return NextResponse.json({ error: "rate_limited" }, { status: 429, headers: corsHeaders });
   }
 
   let json: unknown;
   try {
-    json = await request.json();
+    const body = await request.text();
+    if (body.length > 32_768) {
+      return NextResponse.json({ error: "payload_too_large" }, { status: 413, headers: corsHeaders });
+    }
+    json = JSON.parse(body);
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400, headers: corsHeaders });
   }
@@ -39,7 +45,8 @@ export async function POST(request: NextRequest) {
     parsed.data,
     ip,
     request.headers.get("user-agent"),
-    request.headers.get("origin")
+    request.headers.get("origin"),
+    request.headers
   );
   if (!result.ok) {
     const error = result.status === 403 ? "origin_not_allowed" : "unknown_site";

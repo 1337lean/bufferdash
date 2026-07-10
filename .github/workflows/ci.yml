@@ -10,6 +10,23 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: bufferdash_test
+          POSTGRES_USER: bufferdash
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bufferdash -d bufferdash_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://bufferdash:test_password@127.0.0.1:5432/bufferdash_test
+      TEST_DATABASE_URL: postgresql://bufferdash:test_password@127.0.0.1:5432/bufferdash_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,6 +34,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx prisma migrate deploy
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test

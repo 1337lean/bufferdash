@@ -2,6 +2,7 @@ import "server-only";
 
 import os from "os";
 import si from "systeminformation";
+import type { ServerMetric } from "@prisma/client";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
@@ -51,11 +52,15 @@ export async function collectServerMetric() {
 }
 
 export async function getServerMetrics() {
-  const latest = await collectServerMetric();
-  const history = await prisma.serverMetric.findMany({
+  let history = await prisma.serverMetric.findMany({
     orderBy: { createdAt: "desc" },
     take: 48
   });
+  let latest: ServerMetric | null = history[0] || null;
+  if (env.enableServerMetrics && (!latest || Date.now() - latest.createdAt.getTime() > 2 * 60 * 1000)) {
+    latest = await collectServerMetric();
+    history = await prisma.serverMetric.findMany({ orderBy: { createdAt: "desc" }, take: 48 });
+  }
 
   return {
     latest,

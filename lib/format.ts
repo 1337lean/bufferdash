@@ -23,3 +23,13 @@ export function shortDate(date: Date) {
     minute: "2-digit"
   }).format(date);
 }
+
+export function bytes(value: number | bigint | null | undefined) {
+  const amount = Number(value || 0);
+  if (amount < 1024) return `${amount} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let result = amount / 1024;
+  let index = 0;
+  while (result >= 1024 && index < units.length - 1) { result /= 1024; index += 1; }
+  return `${result.toFixed(result >= 10 ? 0 : 1)} ${units[index]}`;
+}
