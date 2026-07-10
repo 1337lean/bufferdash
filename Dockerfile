@@ -19,6 +19,16 @@ COPY package*.json ./
 COPY prisma ./prisma
 CMD ["npm", "run", "prisma:deploy"]
 
+FROM node:22-alpine AS worker
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY package*.json ./
+COPY prisma ./prisma
+COPY scripts/background-worker.mjs ./scripts/background-worker.mjs
+RUN npx prisma generate
+CMD ["node", "scripts/background-worker.mjs"]
+
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production

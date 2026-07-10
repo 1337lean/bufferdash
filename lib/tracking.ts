@@ -7,6 +7,7 @@ import { detectBot, isSuspiciousPath } from "@/lib/bot";
 import { assertProductionEnv, env } from "@/lib/env";
 import { hashIp, storedIp } from "@/lib/ip";
 import { isAllowedTrackingOrigin } from "@/lib/origin";
+import { resolveGeo } from "@/lib/geo";
 import { prisma } from "@/lib/prisma";
 
 export const trackSchema = z.object({
@@ -44,22 +45,23 @@ export function trimMetadata(metadata: Record<string, unknown> | null | undefine
   ) as Prisma.InputJsonObject;
 }
 
-function jsonValue(value: unknown): Prisma.InputJsonValue {
+function jsonValue(value: unknown, depth = 0): Prisma.InputJsonValue {
+  if (depth >= 4) return "[truncated]";
   if (value === null) return "";
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (typeof value === "string") return value.slice(0, 500);
-  if (Array.isArray(value)) return value.slice(0, 20).map(jsonValue);
+  if (Array.isArray(value)) return value.slice(0, 20).map((child) => jsonValue(child, depth + 1));
   if (typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
         .slice(0, 20)
-        .map(([key, child]) => [key.slice(0, 80), jsonValue(child)])
+        .map(([key, child]) => [key.slice(0, 80), jsonValue(child, depth + 1)])
     ) as Prisma.InputJsonObject;
   }
   return String(value).slice(0, 120);
 }
 
-export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip: string, userAgent: string | null, origin: string | null) {
+export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip: string, userAgent: string | null, origin: string | null, headers = new Headers()) {
   assertProductionEnv();
   const site = await prisma.site.findUnique({ where: { publicKey: input.siteId } });
   if (!site) return { ok: false as const, status: 404 };
@@ -72,6 +74,7 @@ export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip
   const bot = detectBot(userAgent);
   const ipHash = hashIp(ip);
   const persistedIp = storedIp(ip);
+  const geo = await resolveGeo(ip, headers);
 
   if (env.filterBots && bot.isBot) {
     return { ok: true as const, status: 204 };
@@ -116,6 +119,11 @@ export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip
       referrerDomain: referrerDomain(input.referrer),
       ipAddress: persistedIp,
       ipHash,
+      country: geo.country,
+      region: geo.region,
+      city: geo.city,
+      asn: geo.asn,
+      isp: geo.isp,
       userAgent: userAgent || null,
       browser: ua.browser.name || null,
       os: ua.os.name || null,

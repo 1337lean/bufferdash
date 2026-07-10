@@ -6,7 +6,7 @@ const navItems = [
   ["Overview", "/dashboard"],
   ["Sites", "/sites"],
   ["Live", "/live"],
-  ["Traffic quality", "/security"],
+  ["Security", "/security"],
   ["Runtime", "/server"],
   ["Event stream", "/logs"],
   ["Settings", "/settings"]

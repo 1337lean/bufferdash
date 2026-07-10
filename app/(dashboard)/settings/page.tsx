@@ -20,6 +20,8 @@ export default async function SettingsPage() {
             <p><span>Bot filtering</span><strong>{env.filterBots ? "On" : "Off"}</strong></p>
             <p><span>Retention default</span><strong>{env.dataRetentionDays} days</strong></p>
             <p><span>Runtime metrics</span><strong>{env.enableServerMetrics ? "On" : "Off"}</strong></p>
+            <p><span>GeoIP</span><strong>{env.ipinfoToken ? `IPinfo ${env.ipinfoTier}` : "Proxy headers only"}</strong></p>
+            <p><span>Host log ingestion</span><strong>{env.enableLogIngestion ? "On" : "Off"}</strong></p>
           </div>
         </section>
         <section className="panel">

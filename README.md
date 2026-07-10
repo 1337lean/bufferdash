@@ -6,11 +6,13 @@ BufferDash is a self-hosted, first-party web analytics dashboard with traffic-qu
 
 - Multi-site tracking with public site keys
 - Tiny public `/tracker.js` script
-- Page views, sessions, unique visitors, referrers, browsers, OS, devices, and live visitors
+- Page views, sessions, bounce rate, unique visitors, referrers, browsers, OS, devices, locations, and live visitors
+- Selectable 24-hour, 7-day, 30-day, and 90-day analytics ranges
 - Secure IP handling with optional anonymization and hashed IPs
-- Bot and unusual-path signals visible to the browser tracker
+- Bot, unknown-path, failed-login, and rate-limit security signals
+- Optional structured SSH, Fail2Ban, and reverse-proxy event ingestion
 - Protected admin dashboard with signed HTTP-only sessions and CSRF checks for UI mutations
-- Optional metrics visible to the BufferDash process, clearly identified as container/runtime data when applicable
+- Background retention cleanup and optional one-minute runtime metric collection
 - Docker Compose setup with PostgreSQL
 
 ## Quick Start
@@ -38,7 +40,8 @@ http://localhost:3000
 
 ```bash
 cp .env.example .env
-docker compose up -d
+# Replace every production placeholder in .env first.
+docker compose up -d --build
 ```
 
 The Compose stack starts PostgreSQL, waits for it to become healthy, runs Prisma migrations with the `migrate` service, and then starts the app. PostgreSQL is persisted in the `postgres_data` Docker volume and is not published on a host port. BufferDash binds only to `127.0.0.1:3000` by default.
@@ -69,13 +72,19 @@ ADMIN_PASSWORD_HASH=replace_with_a_bcrypt_hash
 TRUST_PROXY=true
 ANONYMIZE_IP=true
 ENABLE_SERVER_METRICS=false
+IPINFO_TOKEN=
+IPINFO_TIER=lite
+ENABLE_LOG_INGESTION=false
+INGESTION_SECRET=
 ```
 
-Generate secrets and the admin password hash:
+Generate secrets and the admin password hash. Generate the hash on a trusted machine after `npm ci`; the interactive form keeps the password out of shell history:
 
 ```bash
 openssl rand -base64 48
-node -e "const bcrypt=require('bcryptjs'); bcrypt.hash(process.argv[1], 12).then(console.log)" 'your-password'
+read -s ADMIN_PASSWORD; export ADMIN_PASSWORD
+node -e 'require("bcryptjs").hash(process.env.ADMIN_PASSWORD, 12).then(console.log)'
+unset ADMIN_PASSWORD
 ```
 
 Start or update the app:
@@ -118,10 +127,12 @@ ADMIN_PASSWORD_HASH=
 SESSION_SECRET=replace_with_a_long_random_secret
 ```
 
-Generate a bcrypt password hash:
+Generate a bcrypt password hash without putting the password in shell history:
 
 ```bash
-node -e "const bcrypt=require('bcryptjs'); bcrypt.hash(process.argv[1], 12).then(console.log)" 'your-password'
+read -s ADMIN_PASSWORD; export ADMIN_PASSWORD
+node -e 'require("bcryptjs").hash(process.env.ADMIN_PASSWORD, 12).then(console.log)'
+unset ADMIN_PASSWORD
 ```
 
 For local development only, `ADMIN_PASSWORD` can be used as a fallback.
@@ -142,7 +153,26 @@ window.bufferdash.track("tool_used", {
 });
 ```
 
-The tracker does not collect form inputs, cookies, localStorage contents, passwords, or URL fragments.
+The tracker does not collect form inputs, cookies, localStorage contents, passwords, URL fragments, or query strings by default. Add `data-include-query` only when you have audited every tracked URL and intentionally want query-string analytics.
+
+## GeoIP
+
+When `TRUST_PROXY=true`, BufferDash uses trusted Cloudflare or Vercel location headers when present. On a normal VPS, set `IPINFO_TOKEN` to enable server-side enrichment. `IPINFO_TIER=lite` provides country and ASN data; `core` provides city and region as well. IP lookups are cached for six hours and private network addresses are never sent to the provider.
+
+GeoIP sends a visitor IP to the configured provider. Leave `IPINFO_TOKEN` empty if that does not fit your privacy policy.
+
+## Optional Host Security Events
+
+Set `ENABLE_LOG_INGESTION=true` and generate a distinct `INGESTION_SECRET` of at least 32 characters. Trusted host tooling can then send a single structured event or a batch of up to 50 events:
+
+```bash
+curl -fsS -X POST https://dash.example.com/api/security/ingest \
+  -H "Authorization: Bearer $INGESTION_SECRET" \
+  -H "Content-Type: application/json" \
+  --data '{"source":"fail2ban","type":"ban","message":"Banned repeated SSH failures","ip":"203.0.113.10"}'
+```
+
+Keep ingestion disabled unless you actively use it. The endpoint returns `404` when disabled or unauthorized.
 
 ## Environment Variables
 
@@ -159,6 +189,9 @@ See `.env.example` for the full set. The most important production values are:
 - `ANONYMIZE_IP`
 - `TRUST_PROXY`
 - `ENFORCE_TRACKING_ORIGIN`
+- `IPINFO_TOKEN` and `IPINFO_TIER` (optional)
+- `ENABLE_LOG_INGESTION` and `INGESTION_SECRET` (optional)
+- `METRICS_INTERVAL_SECONDS` and `CLEANUP_INTERVAL_HOURS`
 
 Settings are environment-driven in v1 so secrets and operational toggles are not exposed through a browser editor.
 
@@ -168,6 +201,8 @@ BufferDash can log IP addresses and user agents. If you deploy it, disclose anal
 
 Data retention cleanup is available from `/settings`. It removes old events, sessions, orphaned visitor identifiers, traffic flags, and runtime metrics. The default retention window is controlled by `DATA_RETENTION_DAYS`.
 
+The background worker performs this cleanup automatically and has its own Docker health check. The manual settings action remains available for immediate cleanup.
+
 ## Security Notes
 
 - `.env` is ignored by Git.
@@ -176,6 +211,7 @@ Data retention cleanup is available from `/settings`. It removes old events, ses
 - Production rejects placeholder secrets, non-HTTPS `APP_URL` values, and missing bcrypt admin hashes.
 - `/api/track` validates payloads with Zod and rate limits by IP.
 - Tracking requests are restricted to each site's configured domain by default. This limits accidental or casual key reuse, though browser origin headers are not a substitute for a private credential.
+- Query strings and fragments are excluded from tracked URLs by default.
 - Public APIs never return analytics data.
 - Client-submitted IP, country, city, browser, OS, and device values are not trusted.
 - v1 intentionally does not include a browser terminal, arbitrary file browser, or `.env` editor.
@@ -200,13 +236,14 @@ server {
 
 ## Roadmap
 
-- GeoIP enrichment with IPinfo or MaxMind
-- Optional reverse-proxy, Fail2Ban, and SSH log ingestion with a dedicated least-privilege agent
+- Offline MaxMind GeoIP database support
+- Packaged least-privilege host agents for common SSH and reverse-proxy formats
 - User roles and TOTP
 - Read-only dashboards
 - Scheduled uptime, latency, HTTP status, and TLS-expiry monitoring
-- Background runtime metric and retention workers
-- Public screenshots and deployment guides
+- Public screenshots
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the production checklist, [SECURITY.md](SECURITY.md) for reporting and operational boundaries, and [CONTRIBUTING.md](CONTRIBUTING.md) for development guidance.
 
 ## License
 

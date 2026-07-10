@@ -2,17 +2,9 @@ import "server-only";
 
 import { Prisma, type Event, type SecurityEvent, type Site } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { rangeHours, rangeStart, type RangeKey } from "@/lib/range";
 
-export type TopRow = {
-  label: string;
-  value: number;
-};
-
-export function startOfToday(now = new Date()) {
-  const date = new Date(now);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
+export type TopRow = { label: string; value: number };
 
 export function sinceHours(hours: number, now = new Date()) {
   return new Date(now.getTime() - hours * 60 * 60 * 1000);
@@ -21,50 +13,47 @@ export function sinceHours(hours: number, now = new Date()) {
 export async function getSites() {
   return prisma.site.findMany({
     orderBy: { createdAt: "desc" },
-    include: {
-      _count: { select: { events: true, sessions: true } }
-    }
+    include: { _count: { select: { events: true, sessions: true } } }
   });
 }
 
 export async function getSite(siteId: string) {
   return prisma.site.findUnique({
     where: { id: siteId },
-    include: {
-      _count: { select: { events: true, sessions: true } }
-    }
+    include: { _count: { select: { events: true, sessions: true } } }
   });
 }
 
-export async function getOverview(siteId?: string) {
+export async function getOverview(siteId: string | undefined, range: RangeKey) {
   const now = new Date();
-  const today = startOfToday(now);
+  const start = rangeStart(range, now);
   const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-  const timelineStart = startOfHour(sinceHours(23, now));
   const where = siteId ? { siteId } : {};
-  const todayWhere = { ...where, createdAt: { gte: today } };
+  const periodWhere = { ...where, createdAt: { gte: start, lte: now } };
 
-  const [pageViewsToday, uniqueVisitorsToday, sessionsToday, liveVisitors, sessionDuration, timeline, sites, securityEvents] =
+  const [pageViews, uniqueVisitors, sessions, liveVisitors, sessionDuration, bounceRate, timeline, sites, securityEvents] =
     await Promise.all([
-      prisma.event.count({ where: { ...todayWhere, type: "pageview" } }),
-      countDistinctVisitorsSince(today, siteId),
-      prisma.session.count({ where: { ...where, startedAt: { gte: today } } }),
-      countDistinctVisitorsSince(fiveMinutesAgo, siteId),
+      prisma.event.count({ where: { ...periodWhere, type: "pageview" } }),
+      countDistinctVisitors(start, now, siteId),
+      prisma.session.count({ where: { ...where, startedAt: { gte: start, lte: now } } }),
+      countDistinctVisitors(fiveMinutesAgo, now, siteId),
       prisma.session.aggregate({
-        where: { ...where, startedAt: { gte: today }, durationMs: { not: null } },
+        where: { ...where, startedAt: { gte: start, lte: now }, durationMs: { not: null } },
         _avg: { durationMs: true }
       }),
-      getHourlyTimeline(timelineStart, now, siteId),
+      getBounceRate(start, now, siteId),
+      getTimeline(start, now, siteId, range),
       prisma.site.count(),
-      prisma.securityEvent.count({ where: { createdAt: { gte: today } } })
+      prisma.securityEvent.count({ where: { createdAt: { gte: start, lte: now } } })
     ]);
 
   return {
-    pageViewsToday,
-    uniqueVisitorsToday,
-    sessionsToday,
+    pageViews,
+    uniqueVisitors,
+    sessions,
     liveVisitors,
     averageSessionDuration: sessionDuration._avg.durationMs || 0,
+    bounceRate,
     sites,
     securityEvents,
     timeline
@@ -72,14 +61,16 @@ export async function getOverview(siteId?: string) {
 }
 
 export async function topByField(
-  field: "path" | "referrerDomain" | "country" | "browser" | "os" | "device",
-  siteId?: string,
+  field: "path" | "referrerDomain" | "country" | "city" | "browser" | "os" | "device",
+  siteId: string | undefined,
+  start: Date,
   limit = 6
 ): Promise<TopRow[]> {
   const rows = await prisma.event.groupBy({
     by: [field],
     where: {
       ...(siteId ? { siteId } : {}),
+      createdAt: { gte: start },
       type: "pageview",
       [field]: { not: null }
     },
@@ -88,39 +79,38 @@ export async function topByField(
     take: limit
   });
 
-  return rows.map((row) => ({
-    label: String(row[field] || "Unknown"),
-    value: row._count._all
-  }));
+  return rows.map((row) => ({ label: String(row[field] || "Unknown"), value: row._count._all }));
 }
 
-export async function getTopTools(siteId?: string, limit = 6): Promise<TopRow[]> {
+export async function getTopTools(siteId: string | undefined, start: Date, limit = 6): Promise<TopRow[]> {
   const rows = await prisma.$queryRaw<Array<{ label: string; count: bigint | number }>>(Prisma.sql`
     SELECT "metadata"->>'tool' AS "label", COUNT(*) AS "count"
     FROM "Event"
     WHERE "type" = 'tool_used'
-      AND "createdAt" >= ${sinceHours(24)}
+      AND "createdAt" >= ${start}
       AND "metadata"->>'tool' IS NOT NULL
       ${siteSqlFilter(siteId)}
     GROUP BY 1
     ORDER BY 2 DESC
     LIMIT ${limit}
   `);
-
   return rows.map((row) => ({ label: row.label, value: Number(row.count) }));
 }
 
-export async function getDashboardData(siteId?: string) {
-  const [overview, topPages, referrers, browsers, devices, topTools] = await Promise.all([
-    getOverview(siteId),
-    topByField("path", siteId),
-    topByField("referrerDomain", siteId),
-    topByField("browser", siteId),
-    topByField("device", siteId),
-    getTopTools(siteId)
+export async function getDashboardData(siteId: string | undefined, range: RangeKey) {
+  const start = rangeStart(range);
+  const [overview, topPages, referrers, countries, cities, browsers, operatingSystems, devices, topTools] = await Promise.all([
+    getOverview(siteId, range),
+    topByField("path", siteId, start),
+    topByField("referrerDomain", siteId, start),
+    topByField("country", siteId, start),
+    topByField("city", siteId, start),
+    topByField("browser", siteId, start),
+    topByField("os", siteId, start),
+    topByField("device", siteId, start),
+    getTopTools(siteId, start)
   ]);
-
-  return { overview, topPages, referrers, browsers, devices, topTools };
+  return { overview, topPages, referrers, countries, cities, browsers, operatingSystems, devices, topTools };
 }
 
 export async function getRecentEvents(siteId?: string, limit = 40) {
@@ -133,17 +123,12 @@ export async function getRecentEvents(siteId?: string, limit = 40) {
 }
 
 export async function getLiveVisitors(siteId?: string) {
-  const now = new Date();
   const events = await prisma.event.findMany({
-    where: {
-      ...(siteId ? { siteId } : {}),
-      createdAt: { gte: new Date(now.getTime() - 5 * 60 * 1000) }
-    },
+    where: { ...(siteId ? { siteId } : {}), createdAt: { gte: sinceHours(5 / 60) } },
     orderBy: { createdAt: "desc" },
     include: { site: true },
-    take: 100
+    take: 200
   });
-
   const seen = new Set<string>();
   return events.filter((event) => {
     const key = event.visitorId || event.ipHash || event.id;
@@ -153,11 +138,19 @@ export async function getLiveVisitors(siteId?: string) {
   });
 }
 
-export async function getSecurityEvents(limit = 80) {
-  return prisma.securityEvent.findMany({
-    orderBy: { createdAt: "desc" },
-    take: limit
+export async function getSecurityEvents(limit = 100) {
+  return prisma.securityEvent.findMany({ orderBy: { createdAt: "desc" }, take: limit });
+}
+
+export async function getSecurityEventCounts() {
+  const rows = await prisma.securityEvent.groupBy({
+    by: ["type"],
+    where: { createdAt: { gte: sinceHours(24) } },
+    _count: { _all: true },
+    orderBy: { _count: { type: "desc" } },
+    take: 8
   });
+  return rows.map((row) => ({ label: row.type.replaceAll("_", " "), value: row._count._all }));
 }
 
 export async function getSuspiciousIps() {
@@ -168,26 +161,17 @@ export async function getSuspiciousIps() {
     orderBy: { _count: { ipHash: "desc" } },
     take: 10
   });
-
-  return rows.map((row) => ({
-    label: row.ipHash?.slice(0, 12) || "unknown",
-    value: row._count._all
-  }));
+  return rows.map((row) => ({ label: row.ipHash?.slice(0, 12) || "unknown", value: row._count._all }));
 }
 
-export async function getAppLogs() {
+export async function getAppLogs(limit = 100) {
   const [security, tracking] = await Promise.all([
-    prisma.securityEvent.findMany({ orderBy: { createdAt: "desc" }, take: 40 }),
-    prisma.event.findMany({ orderBy: { createdAt: "desc" }, include: { site: true }, take: 40 })
+    prisma.securityEvent.findMany({ orderBy: { createdAt: "desc" }, take: limit }),
+    prisma.event.findMany({ orderBy: { createdAt: "desc" }, include: { site: true }, take: limit })
   ]);
-
   return [
     ...security.map((event: SecurityEvent) => ({
-      id: event.id,
-      createdAt: event.createdAt,
-      source: event.source,
-      type: event.type,
-      message: event.message
+      id: event.id, createdAt: event.createdAt, source: event.source, type: event.type, message: event.message
     })),
     ...tracking.map((event: Event & { site: Site }) => ({
       id: event.id,
@@ -196,73 +180,77 @@ export async function getAppLogs() {
       type: event.type,
       message: `${event.path || event.url || "event"} from ${event.browser || "unknown browser"}`
     }))
-  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 80);
+  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, limit);
 }
 
-type HourlyTimelineRow = {
-  hour: Date;
-  pageviews: bigint | number;
-  events: bigint | number;
-};
+type TimelineRow = { bucket: Date; pageviews: bigint | number; events: bigint | number };
 
 function siteSqlFilter(siteId?: string) {
   return siteId ? Prisma.sql`AND "siteId" = ${siteId}` : Prisma.empty;
 }
 
-async function countDistinctVisitorsSince(since: Date, siteId?: string) {
+async function countDistinctVisitors(start: Date, end: Date, siteId?: string) {
   const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
-    SELECT COUNT(DISTINCT "visitorId") AS "count"
-    FROM "Event"
-    WHERE "createdAt" >= ${since}
-      AND "visitorId" IS NOT NULL
-      ${siteSqlFilter(siteId)}
+    SELECT COUNT(DISTINCT "visitorId") AS "count" FROM "Event"
+    WHERE "createdAt" BETWEEN ${start} AND ${end} AND "visitorId" IS NOT NULL ${siteSqlFilter(siteId)}
   `);
-
   return Number(rows[0]?.count || 0);
 }
 
-async function getHourlyTimeline(start: Date, now: Date, siteId?: string) {
-  const rows = await prisma.$queryRaw<HourlyTimelineRow[]>(Prisma.sql`
-    SELECT
-      date_trunc('hour', "createdAt") AS "hour",
-      COUNT(*) FILTER (WHERE "type" = 'pageview') AS "pageviews",
-      COUNT(*) AS "events"
-    FROM "Event"
-    WHERE "createdAt" >= ${start}
-      ${siteSqlFilter(siteId)}
-    GROUP BY 1
-    ORDER BY 1 ASC
+async function getBounceRate(start: Date, end: Date, siteId?: string) {
+  const rows = await prisma.$queryRaw<Array<{ sessions: bigint | number; bounced: bigint | number }>>(Prisma.sql`
+    WITH session_views AS (
+      SELECT "sessionId", COUNT(*) FILTER (WHERE "type" = 'pageview') AS views
+      FROM "Event"
+      WHERE "createdAt" BETWEEN ${start} AND ${end} AND "sessionId" IS NOT NULL ${siteSqlFilter(siteId)}
+      GROUP BY "sessionId"
+    )
+    SELECT COUNT(*) AS sessions, COUNT(*) FILTER (WHERE views <= 1) AS bounced FROM session_views
   `);
-
-  return buildHourlyTimeline(rows, now);
+  const sessions = Number(rows[0]?.sessions || 0);
+  return sessions ? Math.round((Number(rows[0]?.bounced || 0) / sessions) * 100) : 0;
 }
 
-function startOfHour(date: Date) {
-  const hour = new Date(date);
-  hour.setMinutes(0, 0, 0);
-  return hour;
+async function getTimeline(start: Date, now: Date, siteId: string | undefined, range: RangeKey) {
+  const isHourly = rangeHours(range) <= 48;
+  const bucketExpression = isHourly ? Prisma.sql`date_trunc('hour', "createdAt")` : Prisma.sql`date_trunc('day', "createdAt")`;
+  const rows = await prisma.$queryRaw<TimelineRow[]>(Prisma.sql`
+    SELECT ${bucketExpression} AS bucket,
+      COUNT(*) FILTER (WHERE "type" = 'pageview') AS pageviews, COUNT(*) AS events
+    FROM "Event" WHERE "createdAt" BETWEEN ${start} AND ${now} ${siteSqlFilter(siteId)}
+    GROUP BY 1 ORDER BY 1 ASC
+  `);
+  return buildTimeline(rows, start, now, isHourly);
 }
 
-function buildHourlyTimeline(rows: HourlyTimelineRow[], now: Date) {
-  const buckets = Array.from({ length: 24 }, (_, index) => {
-    const date = startOfHour(new Date(now.getTime() - (23 - index) * 60 * 60 * 1000));
-    return {
+function floorDate(date: Date, hourly: boolean) {
+  const value = new Date(date);
+  if (hourly) value.setMinutes(0, 0, 0);
+  else value.setHours(0, 0, 0, 0);
+  return value;
+}
+
+function buildTimeline(rows: TimelineRow[], start: Date, now: Date, hourly: boolean) {
+  const step = hourly ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  const first = floorDate(start, hourly);
+  const last = floorDate(now, hourly);
+  const buckets = [];
+  for (let time = first.getTime(); time <= last.getTime(); time += step) {
+    const date = new Date(time);
+    buckets.push({
       key: date.toISOString(),
-      time: date.toLocaleTimeString("en-US", { hour: "numeric" }),
+      time: hourly ? date.toLocaleTimeString("en-US", { hour: "numeric" }) : date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       pageviews: 0,
       events: 0
-    };
-  });
-
-  const indexByKey = new Map(buckets.map((bucket, index) => [bucket.key, index]));
-
-  for (const row of rows) {
-    const date = startOfHour(new Date(row.hour));
-    const index = indexByKey.get(date.toISOString());
-    if (index === undefined) continue;
-    buckets[index].events = Number(row.events || 0);
-    buckets[index].pageviews = Number(row.pageviews || 0);
+    });
   }
-
+  const byKey = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+  for (const row of rows) {
+    const bucket = byKey.get(floorDate(new Date(row.bucket), hourly).toISOString());
+    if (bucket) {
+      bucket.events = Number(row.events || 0);
+      bucket.pageviews = Number(row.pageviews || 0);
+    }
+  }
   return buckets;
 }

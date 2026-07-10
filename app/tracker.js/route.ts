@@ -51,12 +51,23 @@ export const tracker = String.raw`
   function payload(type, metadata) {
     var url = new URL(window.location.href);
     url.hash = "";
+    var includeQuery = script.hasAttribute && script.hasAttribute("data-include-query");
+    if (!includeQuery) url.search = "";
+    var referrer = null;
+    if (document.referrer) {
+      try {
+        var referrerUrl = new URL(document.referrer);
+        referrerUrl.hash = "";
+        if (!includeQuery) referrerUrl.search = "";
+        referrer = referrerUrl.toString();
+      } catch (error) {}
+    }
     return {
       siteId: siteId,
       type: type || "pageview",
       path: window.location.pathname,
       url: url.toString(),
-      referrer: document.referrer || null,
+      referrer: referrer,
       title: document.title || null,
       screenWidth: window.screen && window.screen.width,
       screenHeight: window.screen && window.screen.height,
@@ -101,6 +112,12 @@ export const tracker = String.raw`
     if (!target) return;
     var href = target.href;
     if (href && target.hostname !== window.location.hostname) {
+      try {
+        var outboundUrl = new URL(href);
+        outboundUrl.hash = "";
+        if (!(script.hasAttribute && script.hasAttribute("data-include-query"))) outboundUrl.search = "";
+        href = outboundUrl.toString();
+      } catch (error) {}
       send(payload("outbound_click", { href: href }), true);
     }
   });
