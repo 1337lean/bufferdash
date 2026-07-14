@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { assertProductionEnv } from "@/lib/env";
+import { assertRuntimeEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    assertProductionEnv();
+    assertRuntimeEnv();
     await prisma.$queryRaw`SELECT 1`;
     return NextResponse.json({ ok: true, configuration: "ok", database: "ok" });
   } catch {

@@ -7,8 +7,8 @@ Please report suspected vulnerabilities privately to the repository owner rather
 ## Operational boundaries
 
 - The public site key is an ingestion identifier, not a credential. Origin checks reduce casual misuse but cannot stop forged server-side requests.
-- Keep the dashboard behind HTTPS and use a long, unique admin password. An additional access layer such as a VPN or identity-aware proxy is recommended for high-risk deployments.
-- PostgreSQL must remain on the internal Docker network. Port 3000 must remain bound to localhost.
+- Keep the dashboard behind HTTPS and use a long, unique admin password. An additional VPN or identity-aware access layer is recommended for high-risk deployments.
+- PostgreSQL must remain on the internal Docker network. Port 3000 must remain bound to localhost behind the reverse proxy.
 - `TRUST_PROXY=true` is safe only when the reverse proxy overwrites forwarding headers and the app is not directly reachable.
 - GeoIP is optional because it sends visitor IP addresses to the configured provider.
 - Host log ingestion is disabled by default and requires a separate random bearer secret.

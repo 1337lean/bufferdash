@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { assertProductionEnv, env, isProduction } from "@/lib/env";
+import { assertRuntimeEnv, env, shouldUseSecureCookies } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 export const SESSION_COOKIE = "bufferdash_session";
@@ -49,13 +49,13 @@ export function readSessionToken(token?: string | null): SessionPayload | null {
 }
 
 export async function getSession() {
-  assertProductionEnv();
+  assertRuntimeEnv();
   const store = await cookies();
   return readSessionToken(store.get(SESSION_COOKIE)?.value);
 }
 
 export async function requireAdmin() {
-  assertProductionEnv();
+  assertRuntimeEnv();
   const session = await getSession();
   if (!session || session.email !== env.adminEmail) {
     redirect("/login");
@@ -66,7 +66,7 @@ export async function requireAdmin() {
 }
 
 export async function verifyAdminCredentials(email: string, password: string) {
-  assertProductionEnv();
+  assertRuntimeEnv();
   if (email.toLowerCase().trim() !== env.adminEmail.toLowerCase()) {
     return false;
   }
@@ -108,7 +108,7 @@ export async function assertCsrf(formData: FormData) {
 export function sessionCookieOptions() {
   return {
     httpOnly: true,
-    secure: isProduction(),
+    secure: shouldUseSecureCookies(),
     sameSite: "lax" as const,
     path: "/",
     maxAge: 60 * 60 * 24 * 7
@@ -118,7 +118,7 @@ export function sessionCookieOptions() {
 export function csrfCookieOptions() {
   return {
     httpOnly: false,
-    secure: isProduction(),
+    secure: shouldUseSecureCookies(),
     sameSite: "lax" as const,
     path: "/",
     maxAge: 60 * 60 * 24 * 7

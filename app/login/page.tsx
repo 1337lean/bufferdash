@@ -21,7 +21,7 @@ export default function LoginPage() {
         <div>
           <span className="eyebrow">Admin</span>
           <h1>Sign in to your dashboard</h1>
-          <p>Analytics, security, and VPS health for buffer.lol and any site you add.</p>
+          <p>Private analytics, traffic quality, and runtime health for the sites you track.</p>
         </div>
         <form action={action} className="stack-form">
           <label>

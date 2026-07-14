@@ -4,7 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { UAParser } from "ua-parser-js";
 import { z } from "zod";
 import { detectBot, isSuspiciousPath } from "@/lib/bot";
-import { assertProductionEnv, env } from "@/lib/env";
+import { assertRuntimeEnv, env } from "@/lib/env";
 import { hashIp, storedIp } from "@/lib/ip";
 import { isAllowedTrackingOrigin } from "@/lib/origin";
 import { resolveGeo } from "@/lib/geo";
@@ -62,7 +62,7 @@ function jsonValue(value: unknown, depth = 0): Prisma.InputJsonValue {
 }
 
 export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip: string, userAgent: string | null, origin: string | null, headers = new Headers()) {
-  assertProductionEnv();
+  assertRuntimeEnv();
   const site = await prisma.site.findUnique({ where: { publicKey: input.siteId } });
   if (!site) return { ok: false as const, status: 404 };
   if (env.enforceTrackingOrigin && !isAllowedTrackingOrigin(origin, site.domain)) {

@@ -11,7 +11,7 @@ export default async function ServerPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Runtime" title="Application runtime health" description="Opt-in metrics visible to the BufferDash process. In Docker, some values may describe the container rather than the full VPS." />
+      <PageHeader eyebrow="Runtime" title="Application runtime health" description="Opt-in metrics visible to the BufferDash process. In Docker, some values describe the container rather than the host machine." />
       <section className="metrics-grid">
         <MetricCard label="CPU" value={`${Math.round(latest?.cpuPercent || 0)}%`} detail="Current load" tone="orange" />
         <MetricCard label="Memory" value={`${memoryPercent}%`} detail={`${Math.round(latest?.memoryUsedMb || 0)} MB used`} />
