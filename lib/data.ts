@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma, type Event, type SecurityEvent, type Site } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { rangeHours, rangeStart, type RangeKey } from "@/lib/range";
+import type { TrafficMode } from "@/lib/filters";
 
 export type TopRow = { label: string; value: number };
 
@@ -13,36 +14,32 @@ export function sinceHours(hours: number, now = new Date()) {
 export async function getSites() {
   return prisma.site.findMany({
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { events: true, sessions: true } } }
+    include: { _count: { select: { events: true, sessions: true } }, events: { select: { createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 } }
   });
 }
 
 export async function getSite(siteId: string) {
   return prisma.site.findUnique({
     where: { id: siteId },
-    include: { _count: { select: { events: true, sessions: true } } }
+    include: { _count: { select: { events: true, sessions: true } }, events: { select: { createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 } }
   });
 }
 
-export async function getOverview(siteId: string | undefined, range: RangeKey) {
+export async function getOverview(siteId: string | undefined, range: RangeKey, traffic: TrafficMode = "human") {
   const now = new Date();
   const start = rangeStart(range, now);
   const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-  const where = siteId ? { siteId } : {};
+  const where = { ...(siteId ? { siteId } : {}), ...eventTrafficWhere(traffic) };
   const periodWhere = { ...where, createdAt: { gte: start, lte: now } };
 
-  const [pageViews, uniqueVisitors, sessions, liveVisitors, sessionDuration, bounceRate, timeline, sites, securityEvents] =
+  const [pageViews, uniqueVisitors, sessionStats, liveVisitors, bounceRate, timeline, sites, securityEvents] =
     await Promise.all([
       prisma.event.count({ where: { ...periodWhere, type: "pageview" } }),
-      countDistinctVisitors(start, now, siteId),
-      prisma.session.count({ where: { ...where, startedAt: { gte: start, lte: now } } }),
-      countDistinctVisitors(fiveMinutesAgo, now, siteId),
-      prisma.session.aggregate({
-        where: { ...where, startedAt: { gte: start, lte: now }, durationMs: { not: null } },
-        _avg: { durationMs: true }
-      }),
-      getBounceRate(start, now, siteId),
-      getTimeline(start, now, siteId, range),
+      countDistinctVisitors(start, now, siteId, traffic),
+      getSessionStats(start, now, siteId, traffic),
+      countDistinctVisitors(fiveMinutesAgo, now, siteId, traffic),
+      getBounceRate(start, now, siteId, traffic),
+      getTimeline(start, now, siteId, range, traffic),
       prisma.site.count(),
       prisma.securityEvent.count({ where: { createdAt: { gte: start, lte: now } } })
     ]);
@@ -50,9 +47,9 @@ export async function getOverview(siteId: string | undefined, range: RangeKey) {
   return {
     pageViews,
     uniqueVisitors,
-    sessions,
+    sessions: sessionStats.sessions,
     liveVisitors,
-    averageSessionDuration: sessionDuration._avg.durationMs || 0,
+    averageSessionDuration: sessionStats.averageDuration,
     bounceRate,
     sites,
     securityEvents,
@@ -64,7 +61,8 @@ export async function topByField(
   field: "path" | "referrerDomain" | "country" | "city" | "browser" | "os" | "device",
   siteId: string | undefined,
   start: Date,
-  limit = 6
+  limit = 6,
+  traffic: TrafficMode = "human"
 ): Promise<TopRow[]> {
   const rows = await prisma.event.groupBy({
     by: [field],
@@ -72,6 +70,7 @@ export async function topByField(
       ...(siteId ? { siteId } : {}),
       createdAt: { gte: start },
       type: "pageview",
+      ...eventTrafficWhere(traffic),
       [field]: { not: null }
     },
     _count: { _all: true },
@@ -82,13 +81,14 @@ export async function topByField(
   return rows.map((row) => ({ label: String(row[field] || "Unknown"), value: row._count._all }));
 }
 
-export async function getTopTools(siteId: string | undefined, start: Date, limit = 6): Promise<TopRow[]> {
+export async function getTopTools(siteId: string | undefined, start: Date, limit = 6, traffic: TrafficMode = "human"): Promise<TopRow[]> {
   const rows = await prisma.$queryRaw<Array<{ label: string; count: bigint | number }>>(Prisma.sql`
     SELECT "metadata"->>'tool' AS "label", COUNT(*) AS "count"
     FROM "Event"
     WHERE "type" = 'tool_used'
       AND "createdAt" >= ${start}
       AND "metadata"->>'tool' IS NOT NULL
+      ${trafficSql(traffic)}
       ${siteSqlFilter(siteId)}
     GROUP BY 1
     ORDER BY 2 DESC
@@ -97,34 +97,34 @@ export async function getTopTools(siteId: string | undefined, start: Date, limit
   return rows.map((row) => ({ label: row.label, value: Number(row.count) }));
 }
 
-export async function getDashboardData(siteId: string | undefined, range: RangeKey) {
+export async function getDashboardData(siteId: string | undefined, range: RangeKey, traffic: TrafficMode = "human") {
   const start = rangeStart(range);
   const [overview, topPages, referrers, countries, cities, browsers, operatingSystems, devices, topTools] = await Promise.all([
-    getOverview(siteId, range),
-    topByField("path", siteId, start),
-    topByField("referrerDomain", siteId, start),
-    topByField("country", siteId, start),
-    topByField("city", siteId, start),
-    topByField("browser", siteId, start),
-    topByField("os", siteId, start),
-    topByField("device", siteId, start),
-    getTopTools(siteId, start)
+    getOverview(siteId, range, traffic),
+    topByField("path", siteId, start, 6, traffic),
+    topByField("referrerDomain", siteId, start, 6, traffic),
+    topByField("country", siteId, start, 6, traffic),
+    topByField("city", siteId, start, 6, traffic),
+    topByField("browser", siteId, start, 6, traffic),
+    topByField("os", siteId, start, 6, traffic),
+    topByField("device", siteId, start, 6, traffic),
+    getTopTools(siteId, start, 6, traffic)
   ]);
   return { overview, topPages, referrers, countries, cities, browsers, operatingSystems, devices, topTools };
 }
 
-export async function getRecentEvents(siteId?: string, limit = 40) {
+export async function getRecentEvents(siteId?: string, limit = 40, traffic: TrafficMode = "human") {
   return prisma.event.findMany({
-    where: siteId ? { siteId } : {},
+    where: { ...(siteId ? { siteId } : {}), ...eventTrafficWhere(traffic) },
     orderBy: { createdAt: "desc" },
     take: limit,
     include: { site: true }
   });
 }
 
-export async function getLiveVisitors(siteId?: string) {
+export async function getLiveVisitors(siteId?: string, traffic: TrafficMode = "human") {
   const events = await prisma.event.findMany({
-    where: { ...(siteId ? { siteId } : {}), createdAt: { gte: sinceHours(5 / 60) } },
+    where: { ...(siteId ? { siteId } : {}), ...eventTrafficWhere(traffic), createdAt: { gte: sinceHours(5 / 60) } },
     orderBy: { createdAt: "desc" },
     include: { site: true },
     take: 200
@@ -189,20 +189,47 @@ function siteSqlFilter(siteId?: string) {
   return siteId ? Prisma.sql`AND "siteId" = ${siteId}` : Prisma.empty;
 }
 
-async function countDistinctVisitors(start: Date, end: Date, siteId?: string) {
+function eventTrafficWhere(traffic: TrafficMode): Prisma.EventWhereInput {
+  if (traffic === "bot") return { isBot: true };
+  if (traffic === "human") return { isBot: false };
+  if (traffic === "unknown") return { id: "__no_classification__" };
+  return {};
+}
+
+function trafficSql(traffic: TrafficMode) {
+  if (traffic === "bot") return Prisma.sql`AND "isBot" = TRUE`;
+  if (traffic === "human") return Prisma.sql`AND "isBot" = FALSE`;
+  if (traffic === "unknown") return Prisma.sql`AND FALSE`;
+  return Prisma.empty;
+}
+
+async function countDistinctVisitors(start: Date, end: Date, siteId?: string, traffic: TrafficMode = "human") {
   const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
     SELECT COUNT(DISTINCT "visitorId") AS "count" FROM "Event"
-    WHERE "createdAt" BETWEEN ${start} AND ${end} AND "visitorId" IS NOT NULL ${siteSqlFilter(siteId)}
+    WHERE "createdAt" BETWEEN ${start} AND ${end} AND "visitorId" IS NOT NULL AND "type" = 'pageview' ${trafficSql(traffic)} ${siteSqlFilter(siteId)}
   `);
   return Number(rows[0]?.count || 0);
 }
 
-async function getBounceRate(start: Date, end: Date, siteId?: string) {
+async function getSessionStats(start: Date, end: Date, siteId?: string, traffic: TrafficMode = "human") {
+  const rows = await prisma.$queryRaw<Array<{ sessions: bigint | number; average: number | null }>>(Prisma.sql`
+    WITH filtered_sessions AS (
+      SELECT DISTINCT "sessionId" FROM "Event"
+      WHERE "createdAt" BETWEEN ${start} AND ${end} AND "sessionId" IS NOT NULL AND "type" = 'pageview'
+      ${trafficSql(traffic)} ${siteSqlFilter(siteId)}
+    )
+    SELECT COUNT(*) AS sessions, AVG(s."durationMs") AS average
+    FROM "Session" s JOIN filtered_sessions f ON f."sessionId" = s.id
+  `);
+  return { sessions: Number(rows[0]?.sessions || 0), averageDuration: Number(rows[0]?.average || 0) };
+}
+
+async function getBounceRate(start: Date, end: Date, siteId?: string, traffic: TrafficMode = "human") {
   const rows = await prisma.$queryRaw<Array<{ sessions: bigint | number; bounced: bigint | number }>>(Prisma.sql`
     WITH session_views AS (
       SELECT "sessionId", COUNT(*) FILTER (WHERE "type" = 'pageview') AS views
       FROM "Event"
-      WHERE "createdAt" BETWEEN ${start} AND ${end} AND "sessionId" IS NOT NULL ${siteSqlFilter(siteId)}
+      WHERE "createdAt" BETWEEN ${start} AND ${end} AND "sessionId" IS NOT NULL AND "type" = 'pageview' ${trafficSql(traffic)} ${siteSqlFilter(siteId)}
       GROUP BY "sessionId"
     )
     SELECT COUNT(*) AS sessions, COUNT(*) FILTER (WHERE views <= 1) AS bounced FROM session_views
@@ -211,13 +238,13 @@ async function getBounceRate(start: Date, end: Date, siteId?: string) {
   return sessions ? Math.round((Number(rows[0]?.bounced || 0) / sessions) * 100) : 0;
 }
 
-async function getTimeline(start: Date, now: Date, siteId: string | undefined, range: RangeKey) {
+async function getTimeline(start: Date, now: Date, siteId: string | undefined, range: RangeKey, traffic: TrafficMode = "human") {
   const isHourly = rangeHours(range) <= 48;
   const bucketExpression = isHourly ? Prisma.sql`date_trunc('hour', "createdAt")` : Prisma.sql`date_trunc('day', "createdAt")`;
   const rows = await prisma.$queryRaw<TimelineRow[]>(Prisma.sql`
     SELECT ${bucketExpression} AS bucket,
       COUNT(*) FILTER (WHERE "type" = 'pageview') AS pageviews, COUNT(*) AS events
-    FROM "Event" WHERE "createdAt" BETWEEN ${start} AND ${now} ${siteSqlFilter(siteId)}
+    FROM "Event" WHERE "createdAt" BETWEEN ${start} AND ${now} ${trafficSql(traffic)} ${siteSqlFilter(siteId)}
     GROUP BY 1 ORDER BY 1 ASC
   `);
   return buildTimeline(rows, start, now, isHourly);

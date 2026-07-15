@@ -29,9 +29,10 @@ export function geoFromTrustedHeaders(headers: Headers): GeoData {
 
 export async function resolveGeo(ip: string, headers: Headers): Promise<GeoData> {
   const fromHeaders = geoFromTrustedHeaders(headers);
-  if (fromHeaders.country || fromHeaders.city || !env.ipinfoToken || !isPublicIp(ip)) return fromHeaders;
+  const complete = Object.values(fromHeaders).every(Boolean);
+  if (complete || !env.ipinfoToken || !isPublicIp(ip)) return fromHeaders;
   const cached = cache.get(ip);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached && cached.expiresAt > Date.now()) return mergeGeo(fromHeaders, cached.value);
   if (cache.size >= 10_000) cache.clear();
 
   try {
@@ -42,12 +43,22 @@ export async function resolveGeo(ip: string, headers: Headers): Promise<GeoData>
     });
     if (!response.ok) return fromHeaders;
     const body = await response.json() as Record<string, unknown>;
-    const value = parseIpinfo(body);
-    cache.set(ip, { value, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
-    return value;
+    const provider = parseIpinfo(body);
+    cache.set(ip, { value: provider, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+    return mergeGeo(fromHeaders, provider);
   } catch {
     return fromHeaders;
   }
+}
+
+function mergeGeo(preferred: GeoData, fallback: GeoData): GeoData {
+  return {
+    country: preferred.country || fallback.country,
+    region: preferred.region || fallback.region,
+    city: preferred.city || fallback.city,
+    asn: preferred.asn || fallback.asn,
+    isp: preferred.isp || fallback.isp
+  };
 }
 
 function parseIpinfo(body: Record<string, unknown>): GeoData {

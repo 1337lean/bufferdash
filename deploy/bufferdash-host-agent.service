@@ -1,0 +1,28 @@
+[Unit]
+Description=BufferDash host metrics and Caddy log collector
+After=network-online.target caddy.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bufferdash-agent
+Group=bufferdash-agent
+SupplementaryGroups=caddy
+EnvironmentFile=/etc/bufferdash-agent.env
+ExecStart=/usr/local/lib/bufferdash/bufferdash-host-agent.py
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/var/lib/bufferdash-agent
+
+[Install]
+WantedBy=multi-user.target

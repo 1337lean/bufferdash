@@ -45,6 +45,12 @@ export function trimMetadata(metadata: Record<string, unknown> | null | undefine
   ) as Prisma.InputJsonObject;
 }
 
+function eventMetadata(type: string, metadata: Record<string, unknown> | null | undefined) {
+  if (type !== "tool_used") return trimMetadata(metadata);
+  const tool = String(metadata?.tool || "").trim().slice(0, 120);
+  return trimMetadata(tool ? { ...metadata, tool } : metadata);
+}
+
 function jsonValue(value: unknown, depth = 0): Prisma.InputJsonValue {
   if (depth >= 4) return "[truncated]";
   if (value === null) return "";
@@ -69,42 +75,48 @@ export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip
     return { ok: false as const, status: 403 };
   }
 
-  const parser = new UAParser(userAgent || "");
-  const ua = parser.getResult();
   const bot = detectBot(userAgent);
-  const ipHash = hashIp(ip);
-  const persistedIp = storedIp(ip);
-  const geo = await resolveGeo(ip, headers);
-
   if (env.filterBots && bot.isBot) {
     return { ok: true as const, status: 204 };
   }
 
-  const visitor = await prisma.visitor.upsert({
-    where: { visitorKey: `${site.publicKey}:${input.visitorId}` },
-    update: { lastSeenAt: new Date() },
-    create: { visitorKey: `${site.publicKey}:${input.visitorId}` }
-  });
-
   const now = new Date();
-  const session = await prisma.session.upsert({
-    where: { sessionKey: `${site.publicKey}:${input.sessionId}` },
-    update: {
-      endedAt: now
-    },
-    create: {
-      sessionKey: `${site.publicKey}:${input.sessionId}`,
-      siteId: site.id,
-      visitorId: visitor.id,
-      endedAt: now,
-      durationMs: 0
+  const durationMs = input.durationMs == null ? null : Math.min(Math.max(0, input.durationMs), 86_400_000);
+  const { visitor, session } = await prisma.$transaction(async (tx) => {
+    const visitor = await tx.visitor.upsert({
+      where: { visitorKey: `${site.publicKey}:${input.visitorId}` },
+      update: { lastSeenAt: now },
+      create: { visitorKey: `${site.publicKey}:${input.visitorId}`, lastSeenAt: now }
+    });
+    const session = await tx.session.upsert({
+      where: { sessionKey: `${site.publicKey}:${input.sessionId}` },
+      update: { endedAt: now, visitorId: visitor.id },
+      create: {
+        sessionKey: `${site.publicKey}:${input.sessionId}`,
+        siteId: site.id,
+        visitorId: visitor.id,
+        endedAt: now,
+        durationMs: durationMs || 0
+      }
+    });
+    if (durationMs !== null) {
+      await tx.session.updateMany({
+        where: { id: session.id, OR: [{ durationMs: null }, { durationMs: { lt: durationMs } }] },
+        data: { durationMs, endedAt: now }
+      });
     }
+    return { visitor, session };
   });
 
-  const durationMs = Math.min(Math.max(0, now.getTime() - session.startedAt.getTime()), 86_400_000);
-  if (session.durationMs !== durationMs) {
-    await prisma.session.update({ where: { id: session.id }, data: { durationMs } });
+  if (input.type === "session_ping" || input.type === "pagehide") {
+    return { ok: true as const, status: 204 };
   }
+
+  const parser = new UAParser(userAgent || "");
+  const ua = parser.getResult();
+  const ipHash = hashIp(ip);
+  const persistedIp = storedIp(ip);
+  const geo = await resolveGeo(ip, headers);
 
   const event = await prisma.event.create({
     data: {
@@ -134,7 +146,7 @@ export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip
       timezone: input.timezone || null,
       isBot: bot.isBot,
       botName: bot.botName,
-      metadata: trimMetadata(input.metadata)
+      metadata: eventMetadata(input.type, input.metadata)
     }
   });
 
@@ -148,6 +160,8 @@ export async function recordTrackingEvent(input: z.infer<typeof trackSchema>, ip
         message: bot.isBot
           ? `${bot.botName || "Bot"} visited ${input.path || "/"}`
           : `Suspicious path requested: ${input.path}`,
+        isBot: bot.isBot,
+        botName: bot.botName,
         metadata: {
           siteId: site.id,
           eventId: event.id,

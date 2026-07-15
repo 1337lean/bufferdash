@@ -74,10 +74,13 @@ for migration_dir in prisma/migrations/*/; do
   [ -f "${migration_dir}migration.sql" ] || fail "Incomplete Prisma migration directory: ${migration_dir%/}"
 done
 
-if [ "$(get_env ENABLE_LOG_INGESTION)" = "true" ]; then
+if [ "$(get_env ENABLE_LOG_INGESTION)" = "true" ] || [ "$(get_env ENABLE_HTTP_INGESTION)" = "true" ] || [ "$(get_env ENABLE_HOST_INGESTION)" = "true" ] || [ "$(get_env SERVER_METRICS_SOURCE)" = "host" ]; then
   ingestion_secret="$(get_env INGESTION_SECRET)"
   [ ${#ingestion_secret} -ge 32 ] && ! looks_placeholder "$ingestion_secret" || fail "INGESTION_SECRET must be a non-placeholder value of at least 32 characters"
 fi
+
+metrics_source="$(get_env SERVER_METRICS_SOURCE)"
+case "${metrics_source:-disabled}" in host|container|disabled) ;; *) fail "SERVER_METRICS_SOURCE must be host, container, or disabled" ;; esac
 
 if [ "${ALLOW_DIRTY:-false}" != "true" ] && [ -n "$(git status --porcelain --untracked-files=all 2>/dev/null || true)" ]; then
   fail "tracked files are modified; deploy from a clean commit"

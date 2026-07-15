@@ -39,7 +39,9 @@ ANONYMIZE_IP=true
 TRUST_PROXY=true
 ENFORCE_TRACKING_ORIGIN=true
 FILTER_BOTS=false
-ENABLE_SERVER_METRICS=true
+SERVER_METRICS_SOURCE=host
+ENABLE_HTTP_INGESTION=true
+ENABLE_HOST_INGESTION=true
 DATA_RETENTION_DAYS=90
 ```
 
@@ -58,7 +60,7 @@ It checks secret strength and separation, the admin hash, HTTPS and loopback set
 ```bash
 scripts/deploy-production.sh .env
 docker compose ps
-curl -fsS http://127.0.0.1:3000/health
+curl -fsS http://127.0.0.1:3001/health
 ```
 
 Both `app` and `worker` should become healthy, `migrate` should exit successfully, and `postgres` should remain healthy.
@@ -67,12 +69,25 @@ The deploy script automatically backs up a running database before an update, re
 
 ## Caddy
 
-```caddy
-dash.buffer.lol {
-    encode zstd gzip
-    reverse_proxy 127.0.0.1:3000
-}
+Use [deploy/Caddyfile.example](deploy/Caddyfile.example) as the starting point. It enables strict trusted-proxy parsing for Cloudflare, overwrites upstream client-IP headers, and writes permission-restricted JSON access logs with 10 MiB rotation, seven rolled files, and seven-day retention. Re-check Cloudflare's published ranges before every proxy change.
+
+Validate the final configuration, then restart Caddy in a short maintenance window because changes to an existing file output may not take effect on reload:
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl restart caddy
 ```
+
+Install the host collector after setting the same strong ingestion secret in `.env` and `/etc/bufferdash-agent.env`:
+
+```bash
+sudo scripts/install-host-agent.sh
+sudoedit /etc/bufferdash-agent.env
+sudo scripts/install-host-agent.sh
+systemctl status bufferdash-host-agent
+```
+
+The agent posts only to `http://127.0.0.1:3001`, strips queries before transmission, retains its inode/offset checkpoint only after successful ingestion, and reads VPS metrics from `/proc`, `/sys`, and the root filesystem.
 
 Allow only SSH, HTTP, and HTTPS through the VPS firewall. Port 3000 must remain bound to loopback, and PostgreSQL must not be exposed publicly.
 
@@ -173,5 +188,7 @@ docker compose up -d
 - Confirm the live `buffer.lol/bufferdash.js` loader points to `dash.buffer.lol/tracker.js`.
 - Confirm a page view appears in BufferDash.
 - Confirm query strings containing test values do not appear in events.
-- Confirm PostgreSQL and port 3000 are unreachable from the public internet.
+- Confirm PostgreSQL and the configured application port are unreachable from the public internet.
+- Confirm Settings shows fresh `caddy` and `host` collectors, then compare Runtime against `top`, `free`, `df /`, and `/proc/uptime`.
+- Generate controlled 404 and 500 responses and confirm sanitized samples appear under HTTP.
 - Confirm backups exist off-host and can be restored.

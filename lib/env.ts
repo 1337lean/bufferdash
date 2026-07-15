@@ -11,12 +11,17 @@ export const env = {
   trackingRateLimit: Number(process.env.RATE_LIMIT_TRACKING_PER_MINUTE || 120),
   enforceTrackingOrigin: process.env.ENFORCE_TRACKING_ORIGIN !== "false",
   adminRateLimit: Number(process.env.RATE_LIMIT_ADMIN_PER_MINUTE || 60),
-  enableServerMetrics: process.env.ENABLE_SERVER_METRICS === "true",
+  serverMetricsSource: (process.env.SERVER_METRICS_SOURCE || (process.env.ENABLE_SERVER_METRICS === "true" ? "container" : "disabled")) as "host" | "container" | "disabled",
+  enableServerMetrics: process.env.SERVER_METRICS_SOURCE
+    ? process.env.SERVER_METRICS_SOURCE !== "disabled"
+    : process.env.ENABLE_SERVER_METRICS === "true",
   dataRetentionDays: Number(process.env.DATA_RETENTION_DAYS || 90),
   filterBots: process.env.FILTER_BOTS === "true",
   ipinfoToken: process.env.IPINFO_TOKEN || "",
   ipinfoTier: process.env.IPINFO_TIER === "core" ? "core" as const : "lite" as const,
   enableLogIngestion: process.env.ENABLE_LOG_INGESTION === "true",
+  enableHttpIngestion: process.env.ENABLE_HTTP_INGESTION === "true" || process.env.ENABLE_LOG_INGESTION === "true",
+  enableHostIngestion: process.env.ENABLE_HOST_INGESTION === "true" || process.env.SERVER_METRICS_SOURCE === "host",
   ingestionSecret: process.env.INGESTION_SECRET || ""
 };
 
@@ -134,8 +139,11 @@ export function assertRuntimeEnv() {
   if (!Number.isFinite(env.dataRetentionDays) || env.dataRetentionDays < 1 || env.dataRetentionDays > 3650) {
     errors.push("DATA_RETENTION_DAYS must be between 1 and 3650");
   }
-  if (env.enableLogIngestion && (env.ingestionSecret.length < 32 || looksLikePlaceholder(env.ingestionSecret))) {
-    errors.push("INGESTION_SECRET must be a random value of at least 32 characters when log ingestion is enabled");
+  if ((env.enableLogIngestion || env.enableHttpIngestion || env.enableHostIngestion) && (env.ingestionSecret.length < 32 || looksLikePlaceholder(env.ingestionSecret))) {
+    errors.push("INGESTION_SECRET must be a random value of at least 32 characters when ingestion is enabled");
+  }
+  if (!['host', 'container', 'disabled'].includes(env.serverMetricsSource)) {
+    errors.push("SERVER_METRICS_SOURCE must be host, container, or disabled");
   }
 
   if (errors.length > 0) {

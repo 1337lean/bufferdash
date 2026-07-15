@@ -8,6 +8,7 @@ export function percent(value: number | null | undefined) {
 
 export function compactDuration(ms: number | null | undefined) {
   if (!ms) return "0s";
+  if (ms > 0 && ms < 1000) return "<1s";
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);

@@ -7,11 +7,20 @@ import { getDashboardData, getRecentEvents } from "@/lib/data";
 import { compactDuration, numberFormat, shortDate } from "@/lib/format";
 import { maskIp } from "@/lib/ip";
 import { parseRange, rangeLabel } from "@/lib/range";
+import { parseTraffic, type SearchParams } from "@/lib/filters";
+import { TrafficToggle } from "@/components/TrafficToggle";
+import { StatusBadge } from "@/components/StatusBadge";
+import { InfoCallout } from "@/components/InfoCallout";
+import { env } from "@/lib/env";
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
-  const range = parseRange((await searchParams).range);
-  const [data, recentEvents] = await Promise.all([getDashboardData(undefined, range), getRecentEvents(undefined, 10)]);
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const params = await searchParams;
+  const range = parseRange(params.range);
+  const traffic = parseTraffic(params.traffic, "human");
+  const [data, recentEvents] = await Promise.all([getDashboardData(undefined, range, traffic), getRecentEvents(undefined, 10, traffic)]);
   const { overview } = data;
+  const cloudflareNetworks = recentEvents.filter((event) => event.asn?.toUpperCase() === "AS13335" || event.isp?.toLowerCase().includes("cloudflare")).length;
+  const proxyWarning = recentEvents.length >= 5 && cloudflareNetworks / recentEvents.length > 0.5;
 
   return (
     <>
@@ -20,7 +29,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         title="Traffic, health, and security at a glance"
         description="A live command center for buffer.lol and any other site you add."
       />
-      <RangeSelector selected={range} basePath="/dashboard" />
+      <TrafficToggle selected={traffic} path="/dashboard" params={params} />
+      <RangeSelector selected={range} basePath="/dashboard" params={params} />
+      {proxyWarning && <InfoCallout title="Check trusted-proxy configuration" tone="warning">Most recent client networks resolve to Cloudflare. This can indicate that the origin is storing the proxy address instead of Caddy&apos;s parsed client IP.</InfoCallout>}
       <section className="metrics-grid">
         <MetricCard label="Unique visitors" value={numberFormat(overview.uniqueVisitors)} detail={rangeLabel(range)} />
         <MetricCard label="Page views" value={numberFormat(overview.pageViews)} detail={rangeLabel(range)} tone="orange" />
@@ -49,7 +60,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <TopList title="Operating systems" rows={data.operatingSystems} />
         <TopList title="Devices" rows={data.devices} />
         <TopList title="Countries" rows={data.countries} />
-        <TopList title="Cities" rows={data.cities} />
+        {data.cities.length ? <TopList title="Cities" rows={data.cities} /> : <section className="panel"><div className="panel-header"><h2>Cities</h2></div>
+          <InfoCallout title={overview.pageViews === 0 ? "No traffic yet" : !env.ipinfoToken ? "City provider not configured" : env.ipinfoTier === "lite" ? "IPinfo Core required" : "No city data returned"}>
+            {overview.pageViews === 0 ? "City data will appear with new page views." : !env.ipinfoToken ? "Configure IPINFO_TOKEN and IPINFO_TIER=core for city analytics." : env.ipinfoTier === "lite" ? "IPinfo Lite supplies country and ASN; Core is needed for city and region." : "Core is configured, but recent events did not include a city."}
+          </InfoCallout></section>}
         <TopList title="Tools used" rows={data.topTools} />
       </section>
 
@@ -61,7 +75,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Time</th><th>Site</th><th>Path</th><th>Visitor</th><th>Browser</th></tr>
+              <tr><th>Time</th><th>Site</th><th>Path</th><th>Visitor</th><th>Classification</th><th>Browser</th></tr>
             </thead>
             <tbody>
               {recentEvents.map((event) => (
@@ -70,10 +84,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   <td>{event.site.name}</td>
                   <td>{event.path || event.type}</td>
                   <td>{maskIp(event.ipAddress)}</td>
+                  <td><StatusBadge isBot={event.isBot} botName={event.botName} asn={event.asn} isp={event.isp} /></td>
                   <td>{event.browser || "Unknown"}</td>
                 </tr>
               ))}
-              {recentEvents.length === 0 && <tr><td colSpan={5}>No events yet. Add a site and install the tracker.</td></tr>}
+              {recentEvents.length === 0 && <tr><td colSpan={6}>No events match this traffic view.</td></tr>}
             </tbody>
           </table>
         </div>

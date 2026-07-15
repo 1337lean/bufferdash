@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { createSiteAction, deleteSiteAction } from "@/app/actions";
+import { CopyField } from "@/components/CopyField";
+import { DisclosurePanel } from "@/components/DisclosurePanel";
 import { CopySnippet } from "@/components/CopySnippet";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { PageHeader } from "@/components/PageHeader";
 import { ActionForm } from "@/components/StateMessage";
 import { getCsrfToken } from "@/lib/auth";
@@ -39,16 +42,18 @@ export default async function SitesPage() {
             <div className="site-card-top">
               <div>
                 <h2><Link href={`/sites/${site.id}`}>{site.name}</Link></h2>
-                <p>{site.domain} · created {shortDate(site.createdAt)}</p>
+                <p>{site.domain}</p>
               </div>
-              <strong>{numberFormat(site._count.events)} events</strong>
+              <strong>{site._count.events ? "Tracking active" : "Awaiting first event"}</strong>
             </div>
-            <CopySnippet value={trackingSnippet(site.publicKey)} />
+            <div className="site-facts"><span>{numberFormat(site._count.events)} events</span><span>Last event {site.events[0] ? shortDate(site.events[0].createdAt) : "—"}</span></div>
+            <CopyField label="Site key — safe to expose" value={site.publicKey} />
+            <DisclosurePanel summary="Show full installation snippet"><CopySnippet value={trackingSnippet(site.publicKey)} /></DisclosurePanel>
             <form action={deleteSiteAction} className="row-actions">
               <input type="hidden" name="csrf" value={csrf} />
               <input type="hidden" name="siteId" value={site.id} />
               <Link className="secondary-button" href={`/sites/${site.id}`}>Open analytics</Link>
-              <button className="danger-button" type="submit">Delete</button>
+              <ConfirmSubmit message={`Delete ${site.name} and all of its analytics?`}>Delete</ConfirmSubmit>
             </form>
           </article>
         ))}

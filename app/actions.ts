@@ -83,7 +83,7 @@ export async function createSiteAction(_state: ActionState, formData: FormData):
   const owner = await ensureAdminUser();
   const publicKey = slugKey(parsed.data.domain);
 
-  await prisma.site.create({
+  const site = await prisma.site.create({
     data: {
       ...parsed.data,
       publicKey,
@@ -91,7 +91,7 @@ export async function createSiteAction(_state: ActionState, formData: FormData):
     }
   });
 
-  redirect("/sites");
+  redirect(`/sites/${site.id}?created=1`);
 }
 
 export async function deleteSiteAction(formData: FormData) {
@@ -117,11 +117,14 @@ export async function deleteOldDataAction(_state: ActionState, formData: FormDat
     await tx.event.deleteMany({ where: { createdAt: { lt: cutoff } } });
     await tx.securityEvent.deleteMany({ where: { createdAt: { lt: cutoff } } });
     await tx.serverMetric.deleteMany({ where: { createdAt: { lt: cutoff } } });
+    await tx.httpErrorSample.deleteMany({ where: { occurredAt: { lt: cutoff } } });
+    await tx.httpRequestBucket.deleteMany({ where: { bucketStart: { lt: cutoff } } });
+    await tx.ingestBatch.deleteMany({ where: { receivedAt: { lt: new Date(Date.now() - 7 * 86_400_000) } } });
     await tx.session.deleteMany({ where: { endedAt: { lt: cutoff } } });
     await tx.visitor.deleteMany({ where: { events: { none: {} }, sessions: { none: {} } } });
   });
 
-  return { success: `Deleted analytics, sessions, visitors, security events, and metrics older than ${days} days.` };
+  return { success: `Deleted analytics, HTTP diagnostics, sessions, visitors, security events, and metrics older than ${days} days.` };
 }
 
 function normalizeDomain(value: string) {

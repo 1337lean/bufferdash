@@ -4,6 +4,7 @@ import { env } from "@/lib/env";
 
 export function getClientIpFromHeaders(headers: Headers) {
   if (env.trustProxy) {
+    // Caddy overwrites these headers after strict trusted-proxy parsing.
     const forwarded = headers.get("x-forwarded-for");
     if (forwarded) {
       return forwarded.split(",")[0]?.trim() || null;
@@ -14,7 +15,7 @@ export function getClientIpFromHeaders(headers: Headers) {
       return realIp.trim();
     }
 
-    return headers.get("cf-connecting-ip") || headers.get("x-vercel-forwarded-for") || null;
+    return null;
   }
 
   return null;

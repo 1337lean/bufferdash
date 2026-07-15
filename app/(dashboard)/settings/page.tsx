@@ -3,9 +3,17 @@ import { PageHeader } from "@/components/PageHeader";
 import { ActionForm } from "@/components/StateMessage";
 import { getCsrfToken } from "@/lib/auth";
 import { env } from "@/lib/env";
+import { prisma } from "@/lib/prisma";
+import { shortDate } from "@/lib/format";
+import { InfoCallout } from "@/components/InfoCallout";
 
 export default async function SettingsPage() {
-  const csrf = await getCsrfToken();
+  const [csrf, sources, databaseTime] = await Promise.all([
+    getCsrfToken(),
+    prisma.ingestionSource.findMany({ orderBy: { name: "asc" } }),
+    prisma.$queryRaw<Array<{ now: Date }>>`SELECT CURRENT_TIMESTAMP AS now`
+  ]);
+  const checkedAt = databaseTime[0]?.now.getTime() || 0;
 
   return (
     <>
@@ -19,15 +27,19 @@ export default async function SettingsPage() {
             <p><span>Site origin checks</span><strong>{env.enforceTrackingOrigin ? "On" : "Off"}</strong></p>
             <p><span>Bot filtering</span><strong>{env.filterBots ? "On" : "Off"}</strong></p>
             <p><span>Retention default</span><strong>{env.dataRetentionDays} days</strong></p>
-            <p><span>Runtime metrics</span><strong>{env.enableServerMetrics ? "On" : "Off"}</strong></p>
+            <p><span>Runtime metrics</span><strong>{env.serverMetricsSource}</strong></p>
             <p><span>GeoIP</span><strong>{env.ipinfoToken ? `IPinfo ${env.ipinfoTier}` : "Proxy headers only"}</strong></p>
-            <p><span>Host log ingestion</span><strong>{env.enableLogIngestion ? "On" : "Off"}</strong></p>
+            <p><span>HTTP ingestion</span><strong>{env.enableHttpIngestion ? "On" : "Off"}</strong></p>
+            <p><span>Host ingestion</span><strong>{env.enableHostIngestion ? "On" : "Off"}</strong></p>
           </div>
         </section>
         <section className="panel">
           <div className="panel-header"><h2>Configuration</h2></div>
           <p className="muted">Edit `.env` and restart BufferDash to change privacy, proxy, retention, and runtime settings. Secrets are intentionally never editable in the browser.</p>
         </section>
+      </section>
+      <section className="panel span-full"><div className="panel-header"><h2>Collector freshness</h2><span>Stale after 150 seconds</span></div>
+        {sources.length ? <div className="settings-list">{sources.map((source) => { const stale = checkedAt - source.lastSeenAt.getTime() > 150_000; return <p key={source.id}><span>{source.name} · {source.hostname || "unknown host"} · agent {source.agentVersion || "unknown"}</span><strong>{stale ? "Stale" : "Fresh"} · {shortDate(source.lastSeenAt)}</strong></p>; })}</div> : <InfoCallout title="No collectors seen" tone="warning">Install and start the host agent after enabling ingestion.</InfoCallout>}
       </section>
       <section className="panel span-full">
         <div className="panel-header"><h2>Data retention cleanup</h2></div>
