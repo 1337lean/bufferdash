@@ -104,6 +104,59 @@ scripts/deploy-production.sh .env.production
 ENV_FILE=.env.production scripts/backup-postgres.sh
 ```
 
+## GitHub Actions deployment
+
+The validation workflow deploys a push to `main` only after lint, type checking, tests, migrations, and the production build pass. The deploy job connects with a dedicated SSH key whose `authorized_keys` entry is restricted to the deployment entrypoint. Production secrets remain in `/opt/bufferdash/.env` on the VPS and are never copied to GitHub.
+
+Generate a dedicated key on a trusted workstation. Do not add a passphrase because the Actions runner cannot answer an interactive prompt:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/bufferdash-actions -C github-actions-bufferdash -N ''
+```
+
+Copy and install the entrypoint on the VPS:
+
+```bash
+scp scripts/vps-deploy-entrypoint.sh lean@VPS_IP:/tmp/bufferdash-deploy
+ssh lean@VPS_IP 'sudo install -o root -g root -m 755 /tmp/bufferdash-deploy /usr/local/bin/bufferdash-deploy && rm /tmp/bufferdash-deploy'
+```
+
+On the VPS, append the public key to `/home/lean/.ssh/authorized_keys` with this prefix, keeping the complete `ssh-ed25519 ...` public key on the same line:
+
+```text
+restrict,command="/usr/local/bin/bufferdash-deploy" ssh-ed25519 PUBLIC_KEY github-actions-bufferdash
+```
+
+Secure the SSH files:
+
+```bash
+chmod 700 /home/lean/.ssh
+chmod 600 /home/lean/.ssh/authorized_keys
+```
+
+Create a GitHub environment named `production`, restrict its deployment branch to `main`, and add:
+
+- Environment variable `VPS_HOST`: the VPS IP address or a DNS name that resolves directly to it
+- Environment variable `VPS_USER`: `lean`
+- Environment variable `VPS_PORT`: the SSH port, normally `22`
+- Environment secret `VPS_DEPLOY_KEY`: the complete contents of `~/.ssh/bufferdash-actions`
+- Environment secret `VPS_KNOWN_HOSTS`: trusted `ssh-keyscan` output for the same host and port
+
+Before trusting `ssh-keyscan` output, compare its ED25519 fingerprint with the host fingerprint shown directly on the VPS:
+
+```bash
+# On the VPS
+sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+
+# On the trusted workstation
+ssh-keyscan -p 22 VPS_IP > /tmp/bufferdash-known-hosts
+ssh-keygen -lf /tmp/bufferdash-known-hosts
+```
+
+After the fingerprints match, paste the complete contents of `/tmp/bufferdash-known-hosts` into `VPS_KNOWN_HOSTS`. Never commit the private key or the production `.env`.
+
+The VPS checkout must remain on `main` and clean. Each deployment fetches `origin/main`, accepts only a requested commit that belongs to that branch, fast-forwards without overwriting server changes, runs the production preflight, backs up PostgreSQL, rebuilds the containers, applies migrations, and waits for health checks.
+
 Restore only during a maintenance window, with both database clients stopped:
 
 ```bash

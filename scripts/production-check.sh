@@ -27,7 +27,11 @@ if [ ! -f "$env_file" ]; then
   exit 1
 fi
 
-mode="$(stat -f '%Lp' "$env_file" 2>/dev/null || stat -c '%a' "$env_file")"
+if stat -c '%a' "$env_file" >/dev/null 2>&1; then
+  mode="$(stat -c '%a' "$env_file")"
+else
+  mode="$(stat -f '%Lp' "$env_file")"
+fi
 case "$mode" in
   400|600) ;;
   *) fail "$env_file permissions must be 600 (or stricter), found $mode" ;;

@@ -1,5 +1,8 @@
 name: Validate BufferDash
 
+permissions:
+  contents: read
+
 on:
   pull_request:
   push:
@@ -39,3 +42,49 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  deploy:
+    name: Deploy production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: production
+      url: https://dash.buffer.lol
+    concurrency:
+      group: bufferdash-production
+      cancel-in-progress: false
+    steps:
+      - name: Configure deploy SSH key
+        env:
+          VPS_DEPLOY_KEY: ${{ secrets.VPS_DEPLOY_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          test -n "$VPS_DEPLOY_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_DEPLOY_KEY" > "$HOME/.ssh/bufferdash_deploy"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/bufferdash_deploy" "$HOME/.ssh/known_hosts"
+
+      - name: Deploy validated commit
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_PORT: ${{ vars.VPS_PORT }}
+          VPS_USER: ${{ vars.VPS_USER }}
+        run: |
+          test -n "$VPS_HOST"
+          VPS_PORT="${VPS_PORT:-22}"
+          VPS_USER="${VPS_USER:-lean}"
+          ssh \
+            -i "$HOME/.ssh/bufferdash_deploy" \
+            -p "$VPS_PORT" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=10 \
+            "$VPS_USER@$VPS_HOST" \
+            "deploy $DEPLOY_SHA"
