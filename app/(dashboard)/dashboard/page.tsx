@@ -19,7 +19,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         eyebrow="Overview"
         title="Traffic, health, and security at a glance"
         description="A live command center for buffer.lol and any other site you add."
-        action={<span className="eyebrow">Deployment test · GitHub Actions is live</span>}
       />
       <RangeSelector selected={range} basePath="/dashboard" />
       <section className="metrics-grid">
