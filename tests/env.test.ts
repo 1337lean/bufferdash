@@ -25,14 +25,36 @@ describe("runtime configuration", () => {
     vi.stubEnv("BIND_ADDRESS", "127.0.0.1");
     vi.stubEnv("SESSION_SECRET", "session-secret-with-more-than-thirty-two-characters");
     vi.stubEnv("TRACKING_SECRET", "tracking-secret-with-more-than-thirty-two-characters");
-    vi.stubEnv("ADMIN_PASSWORD_HASH", "$2b$12$valid-looking-test-hash");
+    vi.stubEnv("ADMIN_PASSWORD_HASH", "$2b$12$01234567890123456789012345678901234567890123456789012");
+    vi.stubEnv("ADMIN_PASSWORD", "");
     vi.stubEnv("ADMIN_EMAIL", "owner@buffer.lol");
     vi.stubEnv("POSTGRES_PASSWORD", "database-password-with-enough-entropy");
     vi.stubEnv("DATABASE_URL", "postgresql://bufferdash:database-password-with-enough-entropy@postgres:5432/bufferdash");
+    vi.stubEnv("TRUST_PROXY", "true");
+    vi.stubEnv("ENFORCE_TRACKING_ORIGIN", "true");
 
     const { assertRuntimeEnv, shouldUseSecureCookies } = await import("../lib/env");
     expect(assertRuntimeEnv).not.toThrow();
     expect(shouldUseSecureCookies()).toBe(true);
+  });
+
+  it("rejects mismatched database credentials in hosted production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("LOCAL_ONLY", "false");
+    vi.stubEnv("APP_URL", "https://dash.buffer.lol");
+    vi.stubEnv("BIND_ADDRESS", "127.0.0.1");
+    vi.stubEnv("SESSION_SECRET", "session-secret-with-more-than-thirty-two-characters");
+    vi.stubEnv("TRACKING_SECRET", "tracking-secret-with-more-than-thirty-two-characters");
+    vi.stubEnv("ADMIN_PASSWORD_HASH", "$2b$12$01234567890123456789012345678901234567890123456789012");
+    vi.stubEnv("ADMIN_PASSWORD", "");
+    vi.stubEnv("ADMIN_EMAIL", "owner@buffer.lol");
+    vi.stubEnv("POSTGRES_PASSWORD", "database-password-with-enough-entropy");
+    vi.stubEnv("DATABASE_URL", "postgresql://bufferdash:different-database-password@postgres:5432/bufferdash");
+    vi.stubEnv("TRUST_PROXY", "true");
+    vi.stubEnv("ENFORCE_TRACKING_ORIGIN", "true");
+
+    const { assertRuntimeEnv } = await import("../lib/env");
+    expect(assertRuntimeEnv).toThrow(/DATABASE_URL must match/);
   });
 
   it("accepts an explicitly loopback-only local configuration", async () => {

@@ -72,14 +72,22 @@ export function assertRuntimeEnv() {
     if (env.sessionSecret === env.trackingSecret) {
       errors.push("SESSION_SECRET and TRACKING_SECRET must be different values");
     }
-    if (!env.adminPasswordHash || !/^\$2[aby]\$/.test(env.adminPasswordHash)) {
-      errors.push("ADMIN_PASSWORD_HASH must be a bcrypt hash");
+    if (!env.adminPasswordHash || !/^\$2[aby]\$(1[2-9]|2\d|3[01])\$[./A-Za-z0-9]{53}$/.test(env.adminPasswordHash)) {
+      errors.push("ADMIN_PASSWORD_HASH must be a bcrypt hash with a cost of at least 12");
+    }
+    if (process.env.ADMIN_PASSWORD) {
+      errors.push("ADMIN_PASSWORD must be empty in hosted production");
     }
     if (!env.adminEmail.includes("@") || env.adminEmail === "admin@example.com") {
       errors.push("ADMIN_EMAIL must be set to the production administrator email");
     }
-    if (!process.env.APP_URL || !env.appUrl.startsWith("https://")) {
-      errors.push("APP_URL must be an https:// URL");
+    try {
+      const appUrl = new URL(env.appUrl);
+      if (appUrl.protocol !== "https:" || !appUrl.hostname || appUrl.pathname !== "/" || appUrl.username || appUrl.password || appUrl.search || appUrl.hash) {
+        errors.push("APP_URL must be a clean https:// origin without credentials, query, or fragment");
+      }
+    } catch {
+      errors.push("APP_URL must be a valid https:// URL");
     }
     const bindAddress = process.env.BIND_ADDRESS || "127.0.0.1";
     if (!["localhost", "127.0.0.1", "::1"].includes(bindAddress)) {
@@ -90,6 +98,30 @@ export function assertRuntimeEnv() {
     }
     if (!process.env.DATABASE_URL || /(bufferdash_password|change|replace)/i.test(process.env.DATABASE_URL)) {
       errors.push("DATABASE_URL must contain the matching non-placeholder database credentials");
+    } else {
+      try {
+        const databaseUrl = new URL(process.env.DATABASE_URL);
+        const expectedUser = process.env.POSTGRES_USER || "bufferdash";
+        const expectedDatabase = process.env.POSTGRES_DB || "bufferdash";
+        const databaseName = databaseUrl.pathname.replace(/^\//, "");
+        if (
+          !["postgresql:", "postgres:"].includes(databaseUrl.protocol) ||
+          databaseUrl.hostname !== "postgres" ||
+          decodeURIComponent(databaseUrl.username) !== expectedUser ||
+          decodeURIComponent(databaseUrl.password) !== process.env.POSTGRES_PASSWORD ||
+          databaseName !== expectedDatabase
+        ) {
+          errors.push("DATABASE_URL must match POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, and use host postgres");
+        }
+      } catch {
+        errors.push("DATABASE_URL must be a valid PostgreSQL URL");
+      }
+    }
+    if (!env.trustProxy) {
+      errors.push("TRUST_PROXY must be true for hosted production behind the required reverse proxy");
+    }
+    if (!env.enforceTrackingOrigin) {
+      errors.push("ENFORCE_TRACKING_ORIGIN must be true in hosted production");
     }
   }
 
@@ -98,6 +130,9 @@ export function assertRuntimeEnv() {
   }
   if (!Number.isFinite(env.adminRateLimit) || env.adminRateLimit < 1) {
     errors.push("RATE_LIMIT_ADMIN_PER_MINUTE must be a positive number");
+  }
+  if (!Number.isFinite(env.dataRetentionDays) || env.dataRetentionDays < 1 || env.dataRetentionDays > 3650) {
+    errors.push("DATA_RETENTION_DAYS must be between 1 and 3650");
   }
   if (env.enableLogIngestion && (env.ingestionSecret.length < 32 || looksLikePlaceholder(env.ingestionSecret))) {
     errors.push("INGESTION_SECRET must be a random value of at least 32 characters when log ingestion is enabled");

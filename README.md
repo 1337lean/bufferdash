@@ -54,13 +54,16 @@ node -e 'require("bcryptjs").hash(process.env.ADMIN_PASSWORD, 12).then(console.l
 unset ADMIN_PASSWORD
 ```
 
-Start and verify:
+Run the production preflight, deploy, and verify:
 
 ```bash
-docker compose up -d --build
+scripts/production-check.sh .env
+scripts/deploy-production.sh .env
 docker compose ps
 curl -fsS http://127.0.0.1:3000/health
 ```
+
+The deploy command takes a database backup before updating an existing installation, applies migrations, waits for the app, worker, and database to become healthy, and fails if any production guardrail is missing.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for Caddy, firewall, update, backup, and final verification guidance.
 
@@ -96,7 +99,7 @@ npm run db:backup
 Restore a dump:
 
 ```bash
-docker compose stop app
+docker compose stop app worker
 npm run db:restore -- backups/bufferdash-YYYYMMDDTHHMMSSZ.dump
 docker compose up -d
 ```

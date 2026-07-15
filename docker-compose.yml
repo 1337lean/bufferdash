@@ -2,6 +2,11 @@ services:
   app:
     build: .
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     env_file:
       - ${ENV_FILE:-.env}
     ports:
@@ -17,23 +22,39 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   migrate:
     build:
       context: .
       target: migrate
     restart: "no"
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     env_file:
       - ${ENV_FILE:-.env}
     depends_on:
       postgres:
         condition: service_healthy
+    logging: *default-logging
 
   worker:
     build:
       context: .
       target: worker
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     env_file:
       - ${ENV_FILE:-.env}
     depends_on:
@@ -47,9 +68,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    logging: *default-logging
 
   postgres:
     image: postgres:16
+    pull_policy: always
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-bufferdash}
@@ -57,12 +80,14 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bufferdash_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    shm_size: 128mb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging: *default-logging
 
 volumes:
   postgres_data:

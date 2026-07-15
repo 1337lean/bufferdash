@@ -2,7 +2,7 @@
 .env.local
 .env.production
 *.log
-logs/
+/logs/
 backups/
 node_modules/
 .npm-cache/

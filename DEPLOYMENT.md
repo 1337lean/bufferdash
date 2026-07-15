@@ -6,6 +6,7 @@
 - Docker Engine with the Compose plugin
 - A DNS record for `dash.buffer.lol` pointing to the VPS
 - Caddy or Nginx terminating HTTPS
+- `git`, `curl`, and `openssl`
 
 ## Configure
 
@@ -17,6 +18,14 @@ chmod 600 .env
 ```
 
 Generate separate database, session, tracking, and optional ingestion secrets. Never reuse a secret and never commit `.env`.
+
+Generate a URL-safe database password and two independent application secrets:
+
+```bash
+openssl rand -hex 32
+openssl rand -base64 48
+openssl rand -base64 48
+```
 
 Use a hexadecimal database password so it can safely appear in `DATABASE_URL`. Keep the bcrypt admin hash single-quoted in `.env` so its `$` characters remain literal.
 
@@ -34,15 +43,27 @@ ENABLE_SERVER_METRICS=true
 DATA_RETENTION_DAYS=90
 ```
 
+Keep `ADMIN_PASSWORD` empty. `ADMIN_PASSWORD_HASH` must be a complete bcrypt hash with a work factor of at least 12. The database password must match exactly in `POSTGRES_PASSWORD` and `DATABASE_URL`.
+
+Before touching containers, run the production preflight:
+
+```bash
+scripts/production-check.sh .env
+```
+
+It checks secret strength and separation, the admin hash, HTTPS and loopback settings, matching database credentials, privacy and origin protections, migration completeness, file permissions, a clean Git tree, and the resolved Compose configuration.
+
 ## Start and verify
 
 ```bash
-docker compose up -d --build
+scripts/deploy-production.sh .env
 docker compose ps
 curl -fsS http://127.0.0.1:3000/health
 ```
 
 Both `app` and `worker` should become healthy, `migrate` should exit successfully, and `postgres` should remain healthy.
+
+The deploy script automatically backs up a running database before an update, rebuilds the images, applies migrations, and waits up to three minutes for all health checks. Application containers run as a non-root user with Linux capabilities dropped, privilege escalation disabled, and bounded Docker JSON logs.
 
 ## Caddy
 
@@ -68,12 +89,27 @@ Restart or redeploy `buffer.lol`, then confirm `https://buffer.lol/bufferdash.js
 
 ## Backups and updates
 
-Schedule `npm run db:backup`, copy encrypted backups off the VPS, and test restoration periodically.
+Schedule `scripts/backup-postgres.sh`, copy encrypted backups off the VPS, and test restoration periodically. The host does not need Node.js or npm for backup and deployment operations.
 
 ```bash
 git pull --ff-only
-docker compose up -d --build
-docker compose ps
+scripts/deploy-production.sh .env
+```
+
+To use a separate environment file, pass it explicitly to operational scripts:
+
+```bash
+scripts/production-check.sh .env.production
+scripts/deploy-production.sh .env.production
+ENV_FILE=.env.production scripts/backup-postgres.sh
+```
+
+Restore only during a maintenance window, with both database clients stopped:
+
+```bash
+docker compose stop app worker
+scripts/restore-postgres.sh backups/bufferdash-YYYYMMDDTHHMMSSZ.dump
+docker compose up -d
 ```
 
 ## Final checks

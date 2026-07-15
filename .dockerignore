@@ -7,7 +7,7 @@
 .npm-cache
 coverage
 dist
-logs
+/logs
 node_modules
 tsconfig.tsbuildinfo
 npm-debug.log*
