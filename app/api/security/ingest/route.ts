@@ -1,10 +1,10 @@
-import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { getClientIp } from "@/lib/ip";
 import { rateLimit } from "@/lib/rate-limit";
 import { recordSecurityEvent } from "@/lib/security-events";
+import { ingestionAuthorized } from "@/lib/ingestion";
 
 export const ingestEventSchema = z.object({
   source: z.string().min(1).max(80),
@@ -18,7 +18,7 @@ export const ingestEventSchema = z.object({
 const bodySchema = z.union([ingestEventSchema, z.array(ingestEventSchema).min(1).max(50)]);
 
 export async function POST(request: NextRequest) {
-  if (!env.enableLogIngestion || !authorized(request.headers.get("authorization"))) {
+  if (!env.enableLogIngestion || !ingestionAuthorized(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   const callerIp = getClientIp(request);
@@ -34,12 +34,4 @@ export async function POST(request: NextRequest) {
   const events = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
   await Promise.all(events.map((event) => recordSecurityEvent({ ...event, ip: event.ip || callerIp })));
   return new NextResponse(null, { status: 204 });
-}
-
-function authorized(header: string | null) {
-  const supplied = header?.startsWith("Bearer ") ? header.slice(7) : "";
-  const expected = env.ingestionSecret;
-  const left = Buffer.from(supplied);
-  const right = Buffer.from(expected);
-  return Boolean(supplied && expected && left.length === right.length && crypto.timingSafeEqual(left, right));
 }

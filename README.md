@@ -11,12 +11,12 @@ BufferDash is a self-hosted, first-party web analytics dashboard with traffic-qu
 - Secure IP handling with optional anonymization and hashed IPs
 - Bot, unknown-path, failed-login, and rate-limit security signals
 - Protected admin dashboard with signed HTTP-only sessions and CSRF checks
-- Background retention cleanup and optional runtime metric collection
+- Background retention cleanup, Caddy HTTP diagnostics, and explicit VPS-host metrics
 - Docker Compose setup with PostgreSQL
 
 ## VPS Deployment
 
-BufferDash should run behind Caddy or Nginx at an HTTPS hostname such as `https://dash.buffer.lol`. PostgreSQL remains inside Docker, while the app binds only to `127.0.0.1:3000`.
+BufferDash should run behind Caddy at an HTTPS hostname such as `https://dash.buffer.lol`. PostgreSQL remains inside Docker, while the app binds only to loopback.
 
 ```bash
 git clone https://github.com/1337lean/bufferdash.git
@@ -60,7 +60,7 @@ Run the production preflight, deploy, and verify:
 scripts/production-check.sh .env
 scripts/deploy-production.sh .env
 docker compose ps
-curl -fsS http://127.0.0.1:3000/health
+curl -fsS http://127.0.0.1:3001/health
 ```
 
 The deploy command takes a database backup before updating an existing installation, applies migrations, waits for the app, worker, and database to become healthy, and fails if any production guardrail is missing.
@@ -122,6 +122,20 @@ window.bufferdash.track("tool_used", {
 });
 ```
 
+The convenience API is equivalent:
+
+```js
+window.bufferdash.trackTool("ping-checker", { mode: "tcp" });
+```
+
+For interactive elements, declarative tracking emits exactly one `tool_used` event per activation:
+
+```html
+<button data-bufferdash-tool="dns-lookup">Run lookup</button>
+```
+
+BufferDash does not infer tool usage from arbitrary clicks. Each tracked application must mark its primary tool action or call `trackTool()` explicitly.
+
 The tracker excludes form inputs, cookies, localStorage contents, passwords, URL fragments, and query strings by default. Add `data-include-query` only after auditing every tracked URL.
 
 ## GeoIP
@@ -143,8 +157,8 @@ GeoIP sends visitor IPs to the configured provider. Leave the token empty if tha
 - `ANONYMIZE_IP`
 - `ENFORCE_TRACKING_ORIGIN`
 - `IPINFO_TOKEN` and `IPINFO_TIER`
-- `ENABLE_LOG_INGESTION` and `INGESTION_SECRET`
-- `ENABLE_SERVER_METRICS`
+- `ENABLE_LOG_INGESTION`, `ENABLE_HTTP_INGESTION`, `ENABLE_HOST_INGESTION`, and `INGESTION_SECRET`
+- `SERVER_METRICS_SOURCE=host|container|disabled` (`ENABLE_SERVER_METRICS` is a temporary compatibility fallback)
 - `DATA_RETENTION_DAYS`
 
 ## Security Notes

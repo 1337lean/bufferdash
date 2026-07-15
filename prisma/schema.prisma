@@ -116,11 +116,16 @@ model SecurityEvent {
   ipAddress String?
   ipHash    String?
   message   String
+  isBot     Boolean?
+  botName   String?
   metadata  Json?
   createdAt DateTime @default(now())
 
   @@index([createdAt])
   @@index([createdAt, ipHash])
+  @@index([createdAt, type])
+  @@index([createdAt, source])
+  @@index([createdAt, isBot])
   @@index([ipAddress])
   @@index([type])
 }
@@ -138,7 +143,72 @@ model ServerMetric {
   uptimeSeconds  Int?
   networkRxBytes BigInt?
   networkTxBytes BigInt?
+  scope          String   @default("container")
+  hostname       String?
+  sampleKey      String?  @unique
   createdAt      DateTime @default(now())
 
   @@index([createdAt])
+  @@index([scope, createdAt])
+}
+
+model HttpRequestBucket {
+  id              String   @id @default(cuid())
+  bucketStart     DateTime
+  host            String
+  method          String
+  path            String
+  status          Int
+  trafficClass    String
+  requestCount    Int      @default(0)
+  durationTotalMs Float    @default(0)
+  durationMaxMs   Float    @default(0)
+  responseBytes   BigInt   @default(0)
+
+  @@unique([bucketStart, host, method, path, status, trafficClass])
+  @@index([bucketStart, status])
+  @@index([host, bucketStart])
+  @@index([path, bucketStart])
+}
+
+model HttpErrorSample {
+  id            String   @id @default(cuid())
+  requestKey    String   @unique
+  occurredAt    DateTime
+  host          String
+  method        String
+  path          String
+  status        Int
+  durationMs    Float
+  responseBytes BigInt?
+  proxyError    String?
+  ipAddress     String?
+  ipHash        String?
+  isBot         Boolean  @default(false)
+  botName       String?
+  userAgent     String?
+  cfRay         String?
+
+  @@index([occurredAt, status])
+  @@index([host, occurredAt])
+  @@index([path, occurredAt])
+  @@index([ipHash, occurredAt])
+}
+
+model IngestBatch {
+  id         String   @id @default(cuid())
+  source     String
+  batchKey   String
+  receivedAt DateTime @default(now())
+
+  @@unique([source, batchKey])
+  @@index([receivedAt])
+}
+
+model IngestionSource {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  lastSeenAt   DateTime
+  agentVersion String?
+  hostname     String?
 }

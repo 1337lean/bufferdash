@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { loginAction } from "@/app/actions";
 
 function LoginButton() {
@@ -9,7 +10,7 @@ function LoginButton() {
 }
 
 export default function LoginPage() {
-  const [state, action] = useFormState(loginAction, {});
+  const [state, action] = useActionState(loginAction, {});
 
   return (
     <main className="login-page">

@@ -3,23 +3,30 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { getLiveVisitors } from "@/lib/data";
 import { shortDate } from "@/lib/format";
 import { maskIp } from "@/lib/ip";
+import { parseTraffic, type SearchParams } from "@/lib/filters";
+import { TrafficToggle } from "@/components/TrafficToggle";
+import { StatusBadge } from "@/components/StatusBadge";
 
-export default async function LivePage() {
-  const visitors = await getLiveVisitors();
+export default async function LivePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const params = await searchParams;
+  const traffic = parseTraffic(params.traffic, "human");
+  const visitors = await getLiveVisitors(undefined, traffic);
 
   return (
     <>
-      <PageHeader eyebrow="Live" title="Visitors active now" description="People and sessions seen in the last five minutes." />
+      <PageHeader eyebrow="Live" title="Visitors active now" description="Recognized human, automated, and unknown sessions seen in the last five minutes." />
+      <TrafficToggle selected={traffic} path="/live" params={params} />
       <AutoRefresh seconds={10} />
       <section className="panel span-full">
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Time</th><th>IP</th><th>Location</th><th>Site</th><th>Page</th><th>Referrer</th><th>Browser</th><th>OS</th><th>Device</th></tr></thead>
+            <thead><tr><th>Time</th><th>IP</th><th>Class</th><th>Location</th><th>Site</th><th>Page</th><th>Referrer</th><th>Browser</th><th>OS</th><th>Device</th></tr></thead>
             <tbody>
               {visitors.map((event) => (
                 <tr key={event.id}>
                   <td>{shortDate(event.createdAt)}</td>
                   <td>{maskIp(event.ipAddress)}</td>
+                  <td><StatusBadge isBot={event.isBot} botName={event.botName} asn={event.asn} isp={event.isp} /></td>
                   <td>{[event.city, event.country].filter(Boolean).join(", ") || "Unknown"}</td>
                   <td>{event.site.name}</td>
                   <td>{event.path || event.type}</td>
@@ -29,7 +36,7 @@ export default async function LivePage() {
                   <td>{event.device || "Unknown"}</td>
                 </tr>
               ))}
-              {visitors.length === 0 && <tr><td colSpan={9}>No active visitors right now.</td></tr>}
+              {visitors.length === 0 && <tr><td colSpan={10}>No active visitors match this traffic view.</td></tr>}
             </tbody>
           </table>
         </div>

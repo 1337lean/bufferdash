@@ -4,7 +4,8 @@ import { PrismaClient } from "@prisma/client";
 import si from "systeminformation";
 
 const prisma = new PrismaClient();
-const metricsEnabled = process.env.ENABLE_SERVER_METRICS === "true";
+const metricsSource = process.env.SERVER_METRICS_SOURCE || (process.env.ENABLE_SERVER_METRICS === "true" ? "container" : "disabled");
+const metricsEnabled = metricsSource === "container";
 const retentionDays = boundedNumber(process.env.DATA_RETENTION_DAYS, 90, 1, 3650);
 const metricsSeconds = boundedNumber(process.env.METRICS_INTERVAL_SECONDS, 60, 15, 3600);
 const cleanupHours = boundedNumber(process.env.CLEANUP_INTERVAL_HOURS, 24, 1, 168);
@@ -21,6 +22,7 @@ async function collectMetric() {
     const disk = disks.find((item) => item.mount === "/") || disks[0];
     const network = networks.reduce((total, item) => ({ rx: total.rx + item.rx_bytes, tx: total.tx + item.tx_bytes }), { rx: 0, tx: 0 });
     await prisma.serverMetric.create({ data: {
+      scope: "container", hostname: os.hostname(),
       cpuPercent: load.currentLoad,
       memoryUsedMb: (mem.total - mem.available) / 1024 / 1024, memoryTotalMb: mem.total / 1024 / 1024,
       diskUsedGb: disk ? disk.used / 1024 / 1024 / 1024 : null, diskTotalGb: disk ? disk.size / 1024 / 1024 / 1024 : null,
@@ -39,6 +41,9 @@ async function cleanup() {
       await tx.event.deleteMany({ where: { createdAt: { lt: cutoff } } });
       await tx.securityEvent.deleteMany({ where: { createdAt: { lt: cutoff } } });
       await tx.serverMetric.deleteMany({ where: { createdAt: { lt: cutoff } } });
+      await tx.httpErrorSample.deleteMany({ where: { occurredAt: { lt: cutoff } } });
+      await tx.httpRequestBucket.deleteMany({ where: { bucketStart: { lt: cutoff } } });
+      await tx.ingestBatch.deleteMany({ where: { receivedAt: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } });
       await tx.session.deleteMany({ where: { endedAt: { lt: cutoff } } });
       await tx.visitor.deleteMany({ where: { events: { none: {} }, sessions: { none: {} } } });
     });
