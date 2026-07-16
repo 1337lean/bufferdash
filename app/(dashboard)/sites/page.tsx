@@ -26,11 +26,11 @@ export default async function SitesPage() {
           <input type="hidden" name="csrf" value={csrf} />
           <label>
             <span>Site name</span>
-            <input name="name" placeholder="buffer.lol" required minLength={2} />
+            <input name="name" placeholder="Example site" required minLength={2} />
           </label>
           <label>
             <span>Domain</span>
-            <input name="domain" placeholder="buffer.lol" required minLength={3} />
+            <input name="domain" placeholder="example.com" required minLength={3} />
           </label>
           <button className="primary-button" type="submit">Create site</button>
         </ActionForm>
@@ -57,7 +57,7 @@ export default async function SitesPage() {
             </form>
           </article>
         ))}
-        {sites.length === 0 && <p className="empty-state">No sites yet. Add buffer.lol first, then paste the snippet into the site.</p>}
+        {sites.length === 0 && <p className="empty-state">No sites yet. Add a domain, then paste the snippet into that site.</p>}
       </section>
     </>
   );

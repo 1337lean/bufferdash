@@ -1,5 +1,8 @@
 # BufferDash
 
+> [!WARNING]
+> **Deprecated and unmaintained.** The original hosted instance was retired on July 15, 2026, and this repository is preserved as a read-only reference. It receives no maintenance, support, or security updates. You are welcome to fork it and continue development under the [MIT License](LICENSE), but review and update its dependencies and security controls before deploying it.
+
 BufferDash is a self-hosted, first-party web analytics dashboard with traffic-quality signals and optional application-runtime metrics. One installation can track multiple sites.
 
 ## Features
@@ -16,7 +19,7 @@ BufferDash is a self-hosted, first-party web analytics dashboard with traffic-qu
 
 ## VPS Deployment
 
-BufferDash should run behind Caddy at an HTTPS hostname such as `https://dash.buffer.lol`. PostgreSQL remains inside Docker, while the app binds only to loopback.
+BufferDash should run behind Caddy at an HTTPS hostname such as `https://analytics.example.com`. PostgreSQL remains inside Docker, while the app binds only to loopback.
 
 ```bash
 git clone https://github.com/1337lean/bufferdash.git
@@ -29,7 +32,7 @@ Configure `.env` before starting:
 
 ```env
 LOCAL_ONLY=false
-APP_URL=https://dash.buffer.lol
+APP_URL=https://analytics.example.com
 BIND_ADDRESS=127.0.0.1
 TZ=America/New_York
 DATABASE_URL=postgresql://bufferdash:YOUR_DATABASE_PASSWORD@postgres:5432/bufferdash
@@ -67,16 +70,16 @@ The deploy command takes a database backup before updating an existing installat
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for Caddy, firewall, update, backup, and final verification guidance.
 
-## Connect buffer.lol
+## Connect a site
 
-After signing in at `https://dash.buffer.lol`, open `/sites`, create a site with domain `buffer.lol`, and copy its generated public site key. Set these values for the `buffer.lol` application on the VPS:
+After signing in, open `/sites`, create a site with its exact domain, and copy the generated public site key. Add the tracker directly or expose a same-origin loader from the tracked application:
 
 ```env
-BUFFERDASH_URL=https://dash.buffer.lol
-BUFFERDASH_SITE_ID=buffer-lol-generated-key
+BUFFERDASH_URL=https://analytics.example.com
+BUFFERDASH_SITE_ID=example-com-generated-key
 ```
 
-Restart or redeploy `buffer.lol`. Its `/bufferdash.js` loader will then inject the BufferDash tracker on every page.
+Restart or redeploy the tracked application after changing its configuration.
 
 ## Local Development
 
@@ -111,7 +114,7 @@ For production, schedule backups and copy them off the VPS. Test restoration per
 The generated snippet looks like:
 
 ```html
-<script defer src="https://dash.buffer.lol/tracker.js" data-site-id="buffer-lol-generated-key"></script>
+<script defer src="https://analytics.example.com/tracker.js" data-site-id="example-com-generated-key"></script>
 ```
 
 Custom events are supported:

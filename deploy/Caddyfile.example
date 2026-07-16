@@ -20,7 +20,7 @@
 	}
 }
 
-dash.buffer.lol {
+analytics.example.com {
 	import bufferdash_access_log
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:3001 {
@@ -30,7 +30,7 @@ dash.buffer.lol {
 }
 
 # Repeat the log import and sanitized headers for every hostname to include in HTTP analytics.
-# buffer.lol {
+# example.com {
 # 	import bufferdash_access_log
 # 	reverse_proxy 127.0.0.1:3000 {
 # 		header_up X-Real-IP {client_ip}

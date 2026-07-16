@@ -1,5 +1,7 @@
 # Contributing
 
+This repository is archived and does not accept issues or pull requests. Fork it if you want to continue development; the code is available under the [MIT License](LICENSE).
+
 ## Development
 
 Run PostgreSQL, copy `.env.example` to `.env`, and use non-production development values.
@@ -10,7 +12,7 @@ npx prisma migrate dev
 npm run dev
 ```
 
-Before submitting a change:
+Before publishing a change in a fork:
 
 ```bash
 npm run validate

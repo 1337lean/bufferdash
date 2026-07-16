@@ -1,10 +1,13 @@
 # Production Deployment
 
+> [!WARNING]
+> This project is deprecated and receives no maintenance or security updates. These instructions are retained for people evaluating or forking the code, not as a claim that the original deployment is still online. Audit the application and update dependencies before exposing a fork to the internet.
+
 ## Prerequisites
 
 - A Linux VPS with current security updates
 - Docker Engine with the Compose plugin
-- A DNS record for `dash.buffer.lol` pointing to the VPS
+- A DNS record such as `analytics.example.com` pointing to the VPS
 - Caddy or Nginx terminating HTTPS
 - `git`, `curl`, and `openssl`
 
@@ -33,7 +36,7 @@ Recommended values:
 
 ```env
 LOCAL_ONLY=false
-APP_URL=https://dash.buffer.lol
+APP_URL=https://analytics.example.com
 BIND_ADDRESS=127.0.0.1
 ANONYMIZE_IP=true
 TRUST_PROXY=true
@@ -91,16 +94,16 @@ The agent posts only to `http://127.0.0.1:3001`, strips queries before transmiss
 
 Allow only SSH, HTTP, and HTTPS through the VPS firewall. Port 3000 must remain bound to loopback, and PostgreSQL must not be exposed publicly.
 
-## Connect buffer.lol
+## Connect a site
 
-Create a `buffer.lol` site in BufferDash, then configure the `buffer.lol` container:
+Create an `example.com` site in BufferDash, then configure the tracked application:
 
 ```env
-BUFFERDASH_URL=https://dash.buffer.lol
-BUFFERDASH_SITE_ID=buffer-lol-generated-key
+BUFFERDASH_URL=https://analytics.example.com
+BUFFERDASH_SITE_ID=example-com-generated-key
 ```
 
-Restart or redeploy `buffer.lol`, then confirm `https://buffer.lol/bufferdash.js` loads the tracker rather than the disabled stub.
+Restart or redeploy the application, then confirm its tracker loader points to the BufferDash instance.
 
 ## Backups and updates
 
@@ -119,59 +122,6 @@ scripts/deploy-production.sh .env.production
 ENV_FILE=.env.production scripts/backup-postgres.sh
 ```
 
-## GitHub Actions deployment
-
-The validation workflow deploys a push to `main` only after lint, type checking, tests, migrations, and the production build pass. The deploy job connects with a dedicated SSH key whose `authorized_keys` entry is restricted to the deployment entrypoint. Production secrets remain in `/opt/bufferdash/.env` on the VPS and are never copied to GitHub.
-
-Generate a dedicated key on a trusted workstation. Do not add a passphrase because the Actions runner cannot answer an interactive prompt:
-
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/bufferdash-actions -C github-actions-bufferdash -N ''
-```
-
-Copy and install the entrypoint on the VPS:
-
-```bash
-scp scripts/vps-deploy-entrypoint.sh lean@VPS_IP:/tmp/bufferdash-deploy
-ssh lean@VPS_IP 'sudo install -o root -g root -m 755 /tmp/bufferdash-deploy /usr/local/bin/bufferdash-deploy && rm /tmp/bufferdash-deploy'
-```
-
-On the VPS, append the public key to `/home/lean/.ssh/authorized_keys` with this prefix, keeping the complete `ssh-ed25519 ...` public key on the same line:
-
-```text
-restrict,command="/usr/local/bin/bufferdash-deploy" ssh-ed25519 PUBLIC_KEY github-actions-bufferdash
-```
-
-Secure the SSH files:
-
-```bash
-chmod 700 /home/lean/.ssh
-chmod 600 /home/lean/.ssh/authorized_keys
-```
-
-Create a GitHub environment named `production`, restrict its deployment branch to `main`, and add:
-
-- Environment variable `VPS_HOST`: the VPS IP address or a DNS name that resolves directly to it
-- Environment variable `VPS_USER`: `lean`
-- Environment variable `VPS_PORT`: the SSH port, normally `22`
-- Environment secret `VPS_DEPLOY_KEY`: the complete contents of `~/.ssh/bufferdash-actions`
-- Environment secret `VPS_KNOWN_HOSTS`: trusted `ssh-keyscan` output for the same host and port
-
-Before trusting `ssh-keyscan` output, compare its ED25519 fingerprint with the host fingerprint shown directly on the VPS:
-
-```bash
-# On the VPS
-sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
-
-# On the trusted workstation
-ssh-keyscan -p 22 VPS_IP > /tmp/bufferdash-known-hosts
-ssh-keygen -lf /tmp/bufferdash-known-hosts
-```
-
-After the fingerprints match, paste the complete contents of `/tmp/bufferdash-known-hosts` into `VPS_KNOWN_HOSTS`. Never commit the private key or the production `.env`.
-
-The VPS checkout must remain on `main` and clean. Each deployment fetches `origin/main`, accepts only a requested commit that belongs to that branch, fast-forwards without overwriting server changes, runs the production preflight, backs up PostgreSQL, rebuilds the containers, applies migrations, and waits for health checks.
-
 Restore only during a maintenance window, with both database clients stopped:
 
 ```bash
@@ -184,8 +134,8 @@ docker compose up -d
 
 - Log in and log out successfully over HTTPS.
 - Confirm protected dashboard routes redirect when logged out.
-- Create a site with the exact `buffer.lol` domain.
-- Confirm the live `buffer.lol/bufferdash.js` loader points to `dash.buffer.lol/tracker.js`.
+- Create a site with the exact domain of the tracked application.
+- Confirm its live tracker loader points to the BufferDash instance.
 - Confirm a page view appears in BufferDash.
 - Confirm query strings containing test values do not appear in events.
 - Confirm PostgreSQL and the configured application port are unreachable from the public internet.

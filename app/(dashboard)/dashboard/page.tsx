@@ -29,7 +29,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <PageHeader
         eyebrow="Overview"
         title="Traffic, health, and security at a glance"
-        description="A live command center for buffer.lol and any other site you add."
+        description="A live command center for every site you add."
       />
       <TrafficToggle selected={traffic} path="/dashboard" params={params} />
       <RangeSelector selected={range} basePath="/dashboard" params={params} />

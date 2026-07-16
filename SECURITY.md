@@ -1,8 +1,8 @@
 # Security Policy
 
-## Reporting
+## Project status
 
-Please report suspected vulnerabilities privately to the repository owner rather than opening a public issue. Include affected versions, reproduction steps, impact, and any suggested mitigation. Do not include real visitor data or credentials.
+BufferDash is deprecated and receives no security updates. The original hosted service is offline. Anyone operating a fork is responsible for dependency updates, vulnerability handling, privacy compliance, and deployment security. Do not send vulnerability reports or real visitor data to the original repository owner.
 
 ## Operational boundaries
 
