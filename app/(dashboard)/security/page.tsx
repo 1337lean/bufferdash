@@ -7,6 +7,9 @@ import { FilterBar } from "@/components/FilterBar";
 import { DataTable } from "@/components/DataTable";
 import { InfoCallout } from "@/components/InfoCallout";
 import { StatusBadge } from "@/components/StatusBadge";
+import { EventType } from "@/components/EventType";
+import { IpAddress } from "@/components/IpAddress";
+import { isCloudflareIp } from "@/lib/cloudflare";
 import { parseDateWindow, parsePage, parsePageSize, parseTraffic, queryString, type SearchParams } from "@/lib/filters";
 import { getSecurityPage } from "@/lib/list-data";
 import { shortDate } from "@/lib/format";
@@ -34,6 +37,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
       <label><span>Rows</span><select name="pageSize" defaultValue={pageSize}>{[25,50,100].map((value) => <option key={value}>{value}</option>)}</select></label>
       <button className="primary-button" type="submit">Apply filters</button>
     </form></FilterBar>
+    {data.types.includes("not_found") && <InfoCallout title="What “Not found · 404” means">A visitor or automated scanner requested a URL that does not exist. The requested path is shown in the Message column. This event type is unrelated to IP or location lookup failures.</InfoCallout>}
     {filters.ipHash && <InfoCallout title="Filtered fingerprint">Showing the complete privacy-preserving hash <code>{filters.ipHash}</code>. <Link href={`/security?${queryString(params, { ipHash: undefined, page: 1 })}`}>Clear</Link></InfoCallout>}
     <section className="dashboard-grid">
       <section className="panel"><div className="panel-header"><h2>Repeat flagged visitors</h2></div>
@@ -44,7 +48,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
     </section>
     <section className="panel span-full"><div className="panel-header"><h2>Security events</h2><span>Stable newest-first ordering</span></div>
       <DataTable label="Security events"><thead><tr><th>Time</th><th>Type</th><th>IP</th><th>Source</th><th>Classification</th><th>Message</th></tr></thead><tbody>
-        {data.events.map((event) => <tr key={event.id}><td>{shortDate(event.createdAt)}</td><td>{event.type}</td><td>{maskIp(event.ipAddress)}</td><td>{event.source}</td><td><StatusBadge isBot={event.isBot} botName={event.botName} /></td><td className="wrap-cell" title={event.message}>{event.message}</td></tr>)}
+        {data.events.map((event) => <tr key={event.id}><td>{shortDate(event.createdAt)}</td><td><EventType value={event.type} /></td><td><IpAddress address={maskIp(event.ipAddress)} isCloudflare={isCloudflareIp(event.ipAddress)} /></td><td>{event.source}</td><td><StatusBadge isBot={event.isBot} botName={event.botName} /></td><td className="wrap-cell" title={event.message}>{event.message}</td></tr>)}
         {!data.events.length && <tr><td colSpan={6}>No security events match these filters.</td></tr>}
       </tbody></DataTable><Pagination path="/security" params={params} page={page} pageSize={pageSize} total={data.total} />
     </section>

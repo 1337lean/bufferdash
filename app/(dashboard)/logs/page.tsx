@@ -5,6 +5,7 @@ import { Pagination } from "@/components/Pagination";
 import { FilterBar } from "@/components/FilterBar";
 import { DataTable } from "@/components/DataTable";
 import { StatusBadge } from "@/components/StatusBadge";
+import { EventType } from "@/components/EventType";
 import { parseDateWindow, parsePage, parsePageSize, parseTraffic, type SearchParams } from "@/lib/filters";
 import { getAppLogPage } from "@/lib/list-data";
 import { shortDate } from "@/lib/format";
@@ -31,7 +32,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
       <button className="primary-button" type="submit">Apply filters</button>
     </form></FilterBar>
     <section className="panel span-full"><DataTable label="Event stream"><thead><tr><th>Time</th><th>Kind</th><th>Source</th><th>Type</th><th>Classification</th><th>Message</th></tr></thead><tbody>
-      {data.rows.map((row) => <tr key={`${row.kind}:${row.id}`}><td>{shortDate(row.createdAt)}</td><td>{row.kind}</td><td>{row.source}</td><td>{row.type}</td><td><StatusBadge isBot={row.isBot} /></td><td className="wrap-cell" title={row.message}>{row.message}</td></tr>)}
+      {data.rows.map((row) => <tr key={`${row.kind}:${row.id}`}><td>{shortDate(row.createdAt)}</td><td>{row.kind}</td><td>{row.source}</td><td><EventType value={row.type} /></td><td><StatusBadge isBot={row.isBot} /></td><td className="wrap-cell" title={row.message}>{row.message}</td></tr>)}
       {!data.rows.length && <tr><td colSpan={6}>No events match these filters.</td></tr>}
     </tbody></DataTable><Pagination path="/logs" params={params} page={page} pageSize={pageSize} total={data.total} /></section>
   </>;

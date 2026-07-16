@@ -13,6 +13,8 @@ import { parseDateWindow, parsePage, parsePageSize, parseTraffic, type SearchPar
 import { compactDuration, numberFormat, shortDate } from "@/lib/format";
 import { getHttpPage } from "@/lib/list-data";
 import { maskIp } from "@/lib/ip";
+import { isCloudflareIp } from "@/lib/cloudflare";
+import { IpAddress } from "@/components/IpAddress";
 
 const one = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
 
@@ -56,7 +58,7 @@ export default async function HttpPage({ searchParams }: { searchParams: Promise
     <section className="dashboard-grid"><TopList title="Top failing paths" rows={data.paths} /><TopList title="Status codes" rows={data.statuses} /></section>
     <section className="panel span-full"><div className="panel-header"><h2>Recent 4xx/5xx samples</h2><span>Sanitized; no queries, bodies, cookies, or authorization</span></div>
       <DataTable label="HTTP error samples"><thead><tr><th>Time</th><th>Status</th><th>Host</th><th>Method</th><th>Path</th><th>Duration</th><th>Visitor</th><th>Classification</th><th>Proxy error</th></tr></thead><tbody>
-        {data.samples.map((sample) => <tr key={sample.id}><td>{shortDate(sample.occurredAt)}</td><td><span className={`status-badge ${sample.status >= 500 ? "error" : "warning"}`}>{sample.status >= 500 ? "Server error" : "Client error"} · {sample.status}</span></td><td>{sample.host}</td><td>{sample.method}</td><td className="wrap-cell" title={sample.path}>{sample.path}</td><td>{compactDuration(sample.durationMs)}</td><td>{maskIp(sample.ipAddress)}</td><td><StatusBadge isBot={sample.isBot} botName={sample.botName} /></td><td className="wrap-cell">{sample.proxyError || "—"}</td></tr>)}
+        {data.samples.map((sample) => <tr key={sample.id}><td>{shortDate(sample.occurredAt)}</td><td><span className={`status-badge ${sample.status >= 500 ? "error" : "warning"}`}>{sample.status >= 500 ? "Server error" : "Client error"} · {sample.status}</span></td><td>{sample.host}</td><td>{sample.method}</td><td className="wrap-cell" title={sample.path}>{sample.path}</td><td>{compactDuration(sample.durationMs)}</td><td><IpAddress address={maskIp(sample.ipAddress)} isCloudflare={isCloudflareIp(sample.ipAddress)} /></td><td><StatusBadge isBot={sample.isBot} botName={sample.botName} /></td><td className="wrap-cell">{sample.proxyError || "—"}</td></tr>)}
         {!data.samples.length && <tr><td colSpan={9}>No 4xx/5xx samples match these filters.</td></tr>}
       </tbody></DataTable><Pagination path="/http" params={params} page={page} pageSize={pageSize} total={data.sampleCount} /></section>
   </>;

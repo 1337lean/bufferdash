@@ -6,6 +6,8 @@ import { maskIp } from "@/lib/ip";
 import { parseTraffic, type SearchParams } from "@/lib/filters";
 import { TrafficToggle } from "@/components/TrafficToggle";
 import { StatusBadge } from "@/components/StatusBadge";
+import { isCloudflareIp } from "@/lib/cloudflare";
+import { IpAddress } from "@/components/IpAddress";
 
 export default async function LivePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
@@ -25,7 +27,7 @@ export default async function LivePage({ searchParams }: { searchParams: Promise
               {visitors.map((event) => (
                 <tr key={event.id}>
                   <td>{shortDate(event.createdAt)}</td>
-                  <td>{maskIp(event.ipAddress)}</td>
+                  <td><IpAddress address={maskIp(event.ipAddress)} isCloudflare={isCloudflareIp(event.ipAddress)} /></td>
                   <td><StatusBadge isBot={event.isBot} botName={event.botName} asn={event.asn} isp={event.isp} /></td>
                   <td>{[event.city, event.country].filter(Boolean).join(", ") || "Unknown"}</td>
                   <td>{event.site.name}</td>

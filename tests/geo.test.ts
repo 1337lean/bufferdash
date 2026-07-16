@@ -10,6 +10,14 @@ describe("GeoIP helpers", () => {
     expect(geoFromTrustedHeaders(headers)).toMatchObject({ country: "US", city: "New York", region: "NY" });
   });
 
+  it("uses Cloudflare visitor location headers without a provider", async () => {
+    vi.resetModules();
+    vi.stubEnv("TRUST_PROXY", "true");
+    const { geoFromTrustedHeaders } = await import("../lib/geo");
+    const headers = new Headers({ "cf-ipcountry": "US", "cf-ipcity": "Philadelphia", "cf-region": "Pennsylvania" });
+    expect(geoFromTrustedHeaders(headers)).toMatchObject({ country: "US", city: "Philadelphia", region: "Pennsylvania" });
+  });
+
   it("does not send private addresses to a provider", async () => {
     const { isPublicIp } = await import("../lib/geo");
     expect(isPublicIp("192.168.1.2")).toBe(false);

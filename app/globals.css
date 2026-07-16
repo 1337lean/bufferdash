@@ -349,6 +349,22 @@ td {
   color: #ded9ea;
 }
 
+.ip-address-toggle {
+  margin: -0.35rem -0.45rem;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.35rem 0.45rem;
+  color: #ddd6fe;
+  background: rgba(167, 139, 250, 0.1);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+}
+
+.ip-address-toggle:hover { background: rgba(167, 139, 250, 0.18); }
+.event-type { color: #fed7aa; }
+
 .form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;

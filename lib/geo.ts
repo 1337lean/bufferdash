@@ -20,8 +20,8 @@ export function geoFromTrustedHeaders(headers: Headers): GeoData {
   const country = headerValue(headers, ["cf-ipcountry", "x-vercel-ip-country", "x-geo-country"]);
   return {
     country: country && country !== "XX" ? country.slice(0, 120) : null,
-    region: headerValue(headers, ["x-vercel-ip-country-region", "x-geo-region"])?.slice(0, 120) || null,
-    city: headerValue(headers, ["x-vercel-ip-city", "x-geo-city"])?.slice(0, 120) || null,
+    region: headerValue(headers, ["cf-region", "x-vercel-ip-country-region", "x-geo-region"])?.slice(0, 120) || null,
+    city: headerValue(headers, ["cf-ipcity", "x-vercel-ip-city", "x-geo-city"])?.slice(0, 120) || null,
     asn: headerValue(headers, ["cf-asn", "x-geo-asn"])?.slice(0, 80) || null,
     isp: headerValue(headers, ["x-geo-isp"])?.slice(0, 180) || null
   };
