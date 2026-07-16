@@ -12,6 +12,8 @@ import { TrafficToggle } from "@/components/TrafficToggle";
 import { StatusBadge } from "@/components/StatusBadge";
 import { InfoCallout } from "@/components/InfoCallout";
 import { env } from "@/lib/env";
+import { isCloudflareIp } from "@/lib/cloudflare";
+import { IpAddress } from "@/components/IpAddress";
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
@@ -61,8 +63,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <TopList title="Devices" rows={data.devices} />
         <TopList title="Countries" rows={data.countries} />
         {data.cities.length ? <TopList title="Cities" rows={data.cities} /> : <section className="panel"><div className="panel-header"><h2>Cities</h2></div>
-          <InfoCallout title={overview.pageViews === 0 ? "No traffic yet" : !env.ipinfoToken ? "City provider not configured" : env.ipinfoTier === "lite" ? "IPinfo Core required" : "No city data returned"}>
-            {overview.pageViews === 0 ? "City data will appear with new page views." : !env.ipinfoToken ? "Configure IPINFO_TOKEN and IPINFO_TIER=core for city analytics." : env.ipinfoTier === "lite" ? "IPinfo Lite supplies country and ASN; Core is needed for city and region." : "Core is configured, but recent events did not include a city."}
+          <InfoCallout title={overview.pageViews === 0 ? "No traffic yet" : !env.ipinfoToken ? "City data not received" : env.ipinfoTier === "lite" ? "City data not received" : "No city data returned"}>
+            {overview.pageViews === 0 ? "City data will appear with new page views." : !env.ipinfoToken ? "Enable Cloudflare’s Add visitor location headers managed transform, or configure IPinfo Core." : env.ipinfoTier === "lite" ? "Enable Cloudflare’s location headers or use IPinfo Core; IPinfo Lite supplies only country and ASN." : "Core is configured, but recent events did not include a city."}
           </InfoCallout></section>}
         <TopList title="Tools used" rows={data.topTools} />
       </section>
@@ -83,7 +85,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   <td>{shortDate(event.createdAt)}</td>
                   <td>{event.site.name}</td>
                   <td>{event.path || event.type}</td>
-                  <td>{maskIp(event.ipAddress)}</td>
+                  <td><IpAddress address={maskIp(event.ipAddress)} isCloudflare={isCloudflareIp(event.ipAddress)} /></td>
                   <td><StatusBadge isBot={event.isBot} botName={event.botName} asn={event.asn} isp={event.isp} /></td>
                   <td>{event.browser || "Unknown"}</td>
                 </tr>

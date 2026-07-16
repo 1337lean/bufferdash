@@ -140,7 +140,7 @@ The tracker excludes form inputs, cookies, localStorage contents, passwords, URL
 
 ## GeoIP
 
-When `TRUST_PROXY=true`, BufferDash uses trusted Cloudflare or Vercel location headers when present. Set `IPINFO_TOKEN` for server-side enrichment when appropriate. `IPINFO_TIER=lite` provides country and ASN data; `core` also provides city and region.
+When `TRUST_PROXY=true`, BufferDash uses trusted Cloudflare or Vercel location headers when present. Cloudflare's **Add visitor location headers** managed transform supplies city and region without a separate lookup provider. Set `IPINFO_TOKEN` for server-side enrichment or fallback when appropriate. `IPINFO_TIER=lite` provides country and ASN data; `core` also provides city and region.
 
 GeoIP sends visitor IPs to the configured provider. Leave the token empty if that does not fit your privacy policy.
 

@@ -8,6 +8,8 @@ import { TopList } from "@/components/TopList";
 import { getDashboardData, getRecentEvents, getSite } from "@/lib/data";
 import { compactDuration, numberFormat, shortDate } from "@/lib/format";
 import { maskIp } from "@/lib/ip";
+import { isCloudflareIp } from "@/lib/cloudflare";
+import { IpAddress } from "@/components/IpAddress";
 import { trackingSnippet } from "@/lib/snippet";
 import { parseRange, rangeLabel } from "@/lib/range";
 import { parseTraffic, type SearchParams } from "@/lib/filters";
@@ -59,7 +61,7 @@ export default async function SiteDetailPage({ params, searchParams }: { params:
         <TopList title="Browsers" rows={data.browsers} />
         <TopList title="Operating systems" rows={data.operatingSystems} />
         <TopList title="Countries" rows={data.countries} />
-        {data.cities.length ? <TopList title="Cities" rows={data.cities} /> : <section className="panel"><div className="panel-header"><h2>Cities</h2></div><InfoCallout title={!site._count.events ? "No traffic yet" : !env.ipinfoToken ? "City provider not configured" : env.ipinfoTier === "lite" ? "IPinfo Core required" : "No city data returned"}>City data applies prospectively to new events.</InfoCallout></section>}
+        {data.cities.length ? <TopList title="Cities" rows={data.cities} /> : <section className="panel"><div className="panel-header"><h2>Cities</h2></div><InfoCallout title={!site._count.events ? "No traffic yet" : !env.ipinfoToken || env.ipinfoTier === "lite" ? "City data not received" : "No city data returned"}>Enable Cloudflare&apos;s Add visitor location headers managed transform or use IPinfo Core. City data applies prospectively to new events.</InfoCallout></section>}
         <TopList title="Tools used" rows={data.topTools} />
         <section className="panel">
           <div className="panel-header"><h2>Devices</h2></div>
@@ -76,7 +78,7 @@ export default async function SiteDetailPage({ params, searchParams }: { params:
                 <tr key={event.id}>
                   <td>{shortDate(event.createdAt)}</td>
                   <td>{event.path || event.type}</td>
-                  <td>{maskIp(event.ipAddress)}</td>
+                  <td><IpAddress address={maskIp(event.ipAddress)} isCloudflare={isCloudflareIp(event.ipAddress)} /></td>
                   <td><StatusBadge isBot={event.isBot} botName={event.botName} asn={event.asn} isp={event.isp} /></td>
                   <td>{[event.city, event.country].filter(Boolean).join(", ") || "Unknown"}</td>
                   <td>{event.referrerDomain || "Direct"}</td>
